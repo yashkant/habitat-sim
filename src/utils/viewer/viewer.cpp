@@ -87,6 +87,162 @@ class Viewer : public Mn::Platform::Application {
   void mouseScrollEvent(MouseScrollEvent& event) override;
   void keyPressEvent(KeyEvent& event) override;
 
+  void reloadLights(std::string filepath) {
+    Mn::Debug{} << "reloadLights: " << filepath;
+    esp::io::JsonDocument jsonConfig;
+    try {
+      jsonConfig = esp::io::parseJsonFile(filepath);
+    } catch (...) {
+      LOG(INFO) << filepath << " parse failed";
+      return;
+    }
+    Mn::Debug{} << "  parse success.";
+    esp::gfx::LightSetup lightSetup;
+    if (jsonConfig.HasMember("lights") && jsonConfig["lights"].IsArray()) {
+      const auto& lights = jsonConfig["lights"];
+      // for (const auto& light : lights) {
+      for (rapidjson::SizeType i = 0; i < lights.Size(); i++) {
+        const auto& light = lights[i];
+        ASSERT(light.HasMember("position"));
+        ASSERT(light.HasMember("color"));
+        const auto& pos = light.FindMember("position")->value;
+        ASSERT(pos.IsArray());
+        ASSERT(pos.Size() == 3);
+        ASSERT(pos[0].IsNumber());
+        const auto& colorScale = light.FindMember("color_scale")->value;
+        ASSERT(colorScale.IsNumber());
+        const auto& color = light.FindMember("color")->value;
+        ASSERT(color.IsArray());
+        ASSERT(color.Size() == 3);
+        ASSERT(color[0].IsNumber());
+        lightSetup.push_back(esp::gfx::LightInfo{
+            Magnum::Vector4(pos[0].GetDouble(), pos[1].GetDouble(),
+                            pos[2].GetDouble(), 1),
+            Magnum::Color3(color[0].GetDouble() * colorScale.GetDouble(),
+                           color[1].GetDouble() * colorScale.GetDouble(),
+                           color[2].GetDouble() * colorScale.GetDouble())});
+        Mn::Debug{} << "  parsed light: (c:" << lightSetup.back().color
+                    << ", v:" << lightSetup.back().vector << ")";
+      }
+      Mn::Debug{} << "setting light setup";
+      simulator_->setLightSetup(lightSetup);
+    } else {
+      Mn::Debug{} << "woops, doesn't apply.";
+    }
+  }
+
+  void loadObjectInstances(std::string filepath) {
+    Mn::Debug{} << "loadObjectInstances: " << filepath;
+    esp::io::JsonDocument jsonConfig;
+    try {
+      jsonConfig = esp::io::parseJsonFile(filepath);
+    } catch (...) {
+      LOG(INFO) << filepath << " parse failed";
+      return;
+    }
+
+    static const char* kTypeNames[] = {"Null",  "False",  "True",  "Object",
+                                       "Array", "String", "Number"};
+    std::map<int, std::string> idToObject;
+    for (auto& m : jsonConfig.GetObject()) {
+      bool parseSuccess = true;
+      Mn::Debug{} << m.name.GetString() << ": ";
+      std::string objectString = m.value["object"].GetString();
+      Mn::Debug{} << "  \"object\": " << objectString;
+      const auto& transVal = m.value["translation"].GetArray();
+      const auto& rotVal = m.value["rotation"].GetArray();
+      const auto& scaleVal = m.value["scale"].GetArray();
+      Mn::Vector3 translation =
+          Mn::Vector3(transVal[0].GetDouble(), transVal[1].GetDouble(),
+                      transVal[2].GetDouble());
+      Mn::Vector3 scale =
+          Mn::Vector3(scaleVal[0].GetDouble(), scaleVal[1].GetDouble(),
+                      scaleVal[2].GetDouble());
+      Mn::Quaternion rotation = Mn::Quaternion(
+          Mn::Vector3(rotVal[1].GetDouble(), rotVal[2].GetDouble(),
+                      rotVal[3].GetDouble()),
+          rotVal[0].GetDouble());
+      Mn::Debug{} << "  \"translation\": " << translation;
+      Mn::Debug{} << "  \"rotation\": " << rotation;
+      Mn::Debug{} << "  \"scale\": " << scale;
+
+      // Instance the object
+      auto templateHandles =
+          objectAttrManager_->getFileTemplateHandlesBySubstring(objectString);
+      Mn::Debug{} << "  \"corresponding handles\": " << templateHandles;
+
+      auto preObID = simulator_->addObjectByHandle(templateHandles[0]);
+      auto bb = simulator_->getObjectSceneNode(preObID)->getCumulativeBB();
+      float volume = bb.sizeX() * bb.sizeY() * bb.sizeZ();
+      float mass = fmax(volume * 100, 1.0);
+      Mn::Debug{} << " computed mass = " << mass;
+      simulator_->removeObject(preObID);
+
+      auto objTemplate =
+          objectAttrManager_->getObjectByHandle(templateHandles[0]);
+      objTemplate->setMargin(0.04);
+      objTemplate->setFrictionCoefficient(0.7);
+      objTemplate->setRestitutionCoefficient(0.05);
+      objTemplate->setMass(mass);
+      objectAttrManager_->registerObject(objTemplate, templateHandles[0]);
+
+      // convert translation from Blender to Habitat coordinate system
+      auto frameQuat = Mn::Quaternion::rotation(Mn::Deg(-90), {1.0, 0, 0});
+      translation = frameQuat.transformVector(translation);
+
+      auto obID = simulator_->addObjectByHandle(templateHandles[0]);
+      idToObject[obID] = objectString;
+      simulator_->setTranslation(translation, obID);
+      simulator_->setRotation(frameQuat * rotation, obID);
+
+      std::string motionTypeString = m.value["motiontype"].GetString();
+      if (motionTypeString == "STATIC") {
+        simulator_->setObjectMotionType(esp::physics::MotionType::STATIC, obID);
+      } else if (motionTypeString == "KINEMATIC") {
+        simulator_->setObjectMotionType(esp::physics::MotionType::KINEMATIC,
+                                        obID);
+      } else if (motionTypeString == "DYNAMIC") {
+        simulator_->setObjectMotionType(esp::physics::MotionType::DYNAMIC,
+                                        obID);
+      } else {
+        Mn::Debug{} << "MotionType \"" << motionTypeString << "\" not valid.";
+      }
+    }
+
+    // Now test for contacts in the first frame
+    for (auto id2Obj : idToObject) {
+      auto inContact = simulator_->contactTest(id2Obj.first);
+      Mn::Debug{} << "Object " << id2Obj.second << " contact = " << inContact;
+    }
+  }
+
+  void setupDirectionalLights() {
+    Cr::Utility::Debug{} << "setupDirectionalLights:";
+
+    /*
+    auto defaultLightSetup = simulator_->getLightSetup();
+    for(auto& lightInfo : defaultLightSetup){
+      Cr::Utility::Debug{} << " before (c:" << lightInfo.color << ", v:" <<
+    lightInfo.vector<<")"; lightInfo.vector.w() = 0; lightInfo.color =
+    Mn::Vector3(1); Cr::Utility::Debug{} << " after (c:" << lightInfo.color <<
+    ", v:" << lightInfo.vector<<")";
+    }
+    */
+
+    esp::gfx::LightSetup defaultLightSetup;
+    std::vector<Mn::Vector4> lightDirections = {{0, 1, 0.5, 0}};
+    for (auto direction : lightDirections) {
+      defaultLightSetup.push_back(esp::gfx::LightInfo());
+      defaultLightSetup.back().color = {1, 1, 1};
+      defaultLightSetup.back().vector = direction.normalized();
+      defaultLightSetup.back().model = esp::gfx::LightPositionModel::GLOBAL;
+      Cr::Utility::Debug{} << " after (c:" << defaultLightSetup.back().color
+                           << ", v:" << defaultLightSetup.back().vector << ")";
+    }
+
+    simulator_->setLightSetup(defaultLightSetup);
+  };
+
   // Interactive functions
   void addObject(const std::string& configHandle);
   void addObject(int objID);
@@ -150,6 +306,7 @@ Key Commands:
   'f': (physics) Push the most recently added object.
   't': (physics) Torque the most recently added object.
   'v': (physics) Invert gravity.
+  SPACE: (physics) Toggle simulation stepping on/off.
 ==================================================
   )";
 
@@ -177,6 +334,9 @@ Key Commands:
 
   // The simulator object backend for this viewer instance
   std::unique_ptr<esp::sim::Simulator> simulator_;
+
+  // optional physics stepping
+  bool simulating_ = false;
 
   // The managers belonging to the simulator
   std::shared_ptr<esp::metadata::managers::ObjectAttributesManager>
@@ -239,6 +399,10 @@ Viewer::Viewer(const Arguments& arguments)
       .addOption("physics-config", ESP_DEFAULT_PHYS_SCENE_CONFIG_REL_PATH)
       .setHelp("physics-config",
                "Provide a non-default PhysicsManager config file.")
+      .addOption("light-setup", "")
+      .setHelp("light-setup", "Provide a non-default LightSetup config file.")
+      .addOption("scene-instance", "")
+      .setHelp("scene-instance", "Provide a scene instance config file.")
       .addBooleanOption("disable-navmesh")
       .setHelp("disable-navmesh",
                "Disable the navmesh, disabling agent navigation constraints.")
@@ -296,10 +460,26 @@ Viewer::Viewer(const Arguments& arguments)
 
   simulator_ = esp::sim::Simulator::create_unique(simConfig);
 
+  // load the lighting config if provided (must happen after Sim init)
+  std::string lightConfig = args.value("light-setup");
+  if (Cr::Utility::String::endsWith(lightConfig, ".json")) {
+    lightConfig = Cr::Utility::Directory::join(
+        Corrade::Utility::Directory::current(), lightConfig);
+    reloadLights(lightConfig);
+  }
+
   objectAttrManager_ = simulator_->getObjectAttributesManager();
   assetAttrManager_ = simulator_->getAssetAttributesManager();
   stageAttrManager_ = simulator_->getStageAttributesManager();
   physAttrManager_ = simulator_->getPhysicsAttributesManager();
+
+  // load the lighting config if provided (must happen after Sim init)
+  std::string sceneConfig = args.value("scene-instance");
+  if (Cr::Utility::String::endsWith(sceneConfig, ".json")) {
+    sceneConfig = Cr::Utility::Directory::join(
+        Corrade::Utility::Directory::current(), sceneConfig);
+    loadObjectInstances(sceneConfig);
+  }
 
   // NavMesh customization options
   if (args.isSet("disable-navmesh")) {
@@ -389,7 +569,7 @@ void Viewer::addObject(const std::string& configFile) {
 
   int physObjectID = simulator_->addObjectByHandle(configFile);
   simulator_->setTranslation(new_pos, physObjectID);
-  simulator_->setRotation(esp::core::randomRotation(), physObjectID);
+  // simulator_->setRotation(esp::core::randomRotation(), physObjectID);
 }  // addObject
 
 // add file-based template derived object from keypress
@@ -497,7 +677,7 @@ void Viewer::drawEvent() {
 
   // step physics at a fixed rate
   timeSinceLastSimulation += timeline_.previousFrameDuration();
-  if (timeSinceLastSimulation >= 1.0 / 60.0) {
+  if (timeSinceLastSimulation >= 1.0 / 60.0 && simulating_) {
     simulator_->stepWorld(1.0 / 60.0);
     timeSinceLastSimulation = 0.0;
   }
@@ -724,6 +904,10 @@ void Viewer::keyPressEvent(KeyEvent& event) {
     case KeyEvent::Key::Esc:
       std::exit(0);
       break;
+    case KeyEvent::Key::Space:
+      simulating_ = !simulating_;
+      Mn::Debug{} << " simulating_ = " << simulating_;
+      break;
     case KeyEvent::Key::Left:
       defaultAgent_->act("turnLeft");
       break;
@@ -814,6 +998,9 @@ void Viewer::keyPressEvent(KeyEvent& event) {
     } break;
     case KeyEvent::Key::H:
       printHelpText();
+      break;
+    case KeyEvent::Key::L:
+      setupDirectionalLights();
       break;
     default:
       break;

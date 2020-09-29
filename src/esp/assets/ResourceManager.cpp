@@ -1757,6 +1757,14 @@ std::unique_ptr<MeshData> ResourceManager::createJoinedCollisionMesh(
     const std::string& filename) {
   std::unique_ptr<MeshData> mesh = std::make_unique<MeshData>();
 
+  // TODO: This breaks for STATIC objects with primitive collision objects.
+  if (!resourceDict_.count(filename)) {
+    Mn::Debug{} << "ResourceManager::createJoinedCollisionMesh failed because "
+                   "filename \""
+                << filename << "\" is not in resourceDict.";
+    return mesh;
+  }
+
   CHECK(resourceDict_.count(filename) > 0);
 
   const MeshMetaData& metaData = getMeshMetaData(filename);

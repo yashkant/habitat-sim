@@ -160,6 +160,14 @@ void BulletPhysicsManager::stepPhysics(double dt) {
   // NOTE: worldTime_ will always be a multiple of sceneMetaData_.timestep
   int numSubStepsTaken =
       bWorld_->stepSimulation(dt, /*maxSubSteps*/ 10000, fixedTimeStep_);
+  /*
+  int numSubStepsTaken = 0;
+  while(numSubStepsTaken*fixedTimeStep_ < dt){
+    bWorld_->stepSimulation(fixedTimeStep_, 1, fixedTimeStep_);
+    numSubStepsTaken++;
+  }
+   */
+
   worldTime_ += numSubStepsTaken * fixedTimeStep_;
 }
 

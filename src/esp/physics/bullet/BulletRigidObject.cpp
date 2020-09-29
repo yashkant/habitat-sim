@@ -125,9 +125,10 @@ bool BulletRigidObject::initialization_LibSpecific(
 
   //! Set properties
   bObjectShape_->setMargin(margin);
+  // bObjectShape_->setMargin(0.0);
 
   bObjectShape_->setLocalScaling(btVector3{tmpAttr->getScale()});
-
+  bObjectShape_->recalculateLocalAabb();
   // create the bObjectRigidBody_
   constructRigidBody(false);
 
@@ -242,7 +243,10 @@ void BulletRigidObject::constructBulletCompoundFromMeshes(
       bObjectConvexShapes_.emplace_back(std::make_unique<btConvexHullShape>(
           static_cast<const btScalar*>(mesh.positions.data()->data()),
           mesh.positions.size(), sizeof(Magnum::Vector3)));
-      bObjectConvexShapes_.back()->setMargin(0.0);
+      bObjectConvexShapes_.back()->optimizeConvexHull();
+      bObjectConvexShapes_.back()->initializePolyhedralFeatures();
+      bObjectConvexShapes_.back()->setMargin(0.001);
+      // bObjectConvexShapes_.back()->setMargin(0.0);
       bObjectConvexShapes_.back()->recalcLocalAabb();
       //! Add to compound shape stucture
       bObjectShape_->addChildShape(btTransform{transformFromLocalToWorld},
@@ -313,6 +317,12 @@ bool BulletRigidObject::setMotionType(MotionType mt) {
     staticCollisionObject->setCollisionShape(bObjectShape_.get());
     staticCollisionObject->setWorldTransform(
         bObjectRigidBody_->getWorldTransform());
+    staticCollisionObject->activate(true);
+    staticCollisionObject->setActivationState(DISABLE_DEACTIVATION);
+    staticCollisionObject->setRestitution(0);
+    // staticCollisionObject->setRollingFriction(1.0);
+    // staticCollisionObject->setSpinningFriction(1.0);
+    staticCollisionObject->setFriction(0.5);
     bWorld_->addCollisionObject(
         staticCollisionObject.get(),
         2,       // collisionFilterGroup (2 == StaticFilter)

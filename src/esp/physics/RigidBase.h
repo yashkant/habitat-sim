@@ -178,6 +178,8 @@ class RigidBase : public Magnum::SceneGraph::AbstractFeature3D {
    * it's bounding box, @ref cumulativeBB_. See @ref shiftOrigin.
    */
   void shiftOriginToBBCenter() {
+    Mn::Debug{} << "shiftOriginToBBCenter: "
+                << -node().getCumulativeBB().center();
     shiftOrigin(-node().getCumulativeBB().center());
   }
 

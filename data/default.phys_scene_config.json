@@ -1,10 +1,10 @@
 {
     "physics simulator": "bullet",
-    "timestep": 0.008,
+    "timestep": 0.004,
     "gravity": [0,-9.8,0],
     "friction coefficient": 0.4,
     "restitution coefficient": 0.1,
     "rigid object paths":[
-        "objects"
+        "/Users/alexclegg/Documents/ReplicaCAD/objects_non-structural/configs_convex"
     ]
 }
