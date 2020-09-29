@@ -245,8 +245,8 @@ void BulletRigidObject::constructBulletCompoundFromMeshes(
           mesh.positions.size(), sizeof(Magnum::Vector3)));
       bObjectConvexShapes_.back()->optimizeConvexHull();
       bObjectConvexShapes_.back()->initializePolyhedralFeatures();
-      bObjectConvexShapes_.back()->setMargin(0.001);
-      // bObjectConvexShapes_.back()->setMargin(0.0);
+      // bObjectConvexShapes_.back()->setMargin(0.001);
+      bObjectConvexShapes_.back()->setMargin(0.0);
       bObjectConvexShapes_.back()->recalcLocalAabb();
       //! Add to compound shape stucture
       bObjectShape_->addChildShape(btTransform{transformFromLocalToWorld},
