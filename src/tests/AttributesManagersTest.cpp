@@ -35,9 +35,9 @@ using Attrs::StageAttributes;
 using Attrs::UVSpherePrimitiveAttributes;
 
 const std::string dataDir = Cr::Utility::Directory::join(SCENE_DATASETS, "../");
-const std::string physicsConfigFile = Cr::Utility::Directory::join(
-    SCENE_DATASETS,
-    "../test_assets/testing.phys_scene_config.json");
+const std::string physicsConfigFile =
+    Cr::Utility::Directory::join(SCENE_DATASETS,
+                                 "../test_assets/testing.physics_config.json");
 
 class AttributesManagersTest : public testing::Test {
  protected:
@@ -45,6 +45,7 @@ class AttributesManagersTest : public testing::Test {
     auto MM = MetadataMediator::create();
     // get attributes managers for default dataset
     assetAttributesManager_ = MM->getAssetAttributesManager();
+    lightAttributesManager_ = MM->getLightAttributesManager();
     objectAttributesManager_ = MM->getObjectAttributesManager();
     physicsAttributesManager_ = MM->getPhysicsAttributesManager();
     stageAttributesManager_ = MM->getStageAttributesManager();
@@ -159,6 +160,42 @@ class AttributesManagersTest : public testing::Test {
     auto oldTemplate3 = mgr->removeObjectByHandle(handle);
     // verify deleted template  exists
     ASSERT_NE(nullptr, oldTemplate3);
+    // verify there are same number of templates as when we started
+    ASSERT_EQ(orignNumTemplates, mgr->getNumObjects());
+
+  }  // AttributesManagersTest::testCreateAndRemove
+
+  /**
+   * @brief Test creation, copying and removal of templates for lights
+   * attributes managers.
+   * @param mgr the Attributes Manager being tested,
+   * @param handle the handle of the desired attributes template to work with
+   */
+
+  void testCreateAndRemoveLights(AttrMgrs::LightAttributesManager::ptr mgr,
+                                 const std::string& handle) {
+    // meaningless key to modify attributes for verifcation of behavior
+    std::string keyStr = "tempKey";
+    // get starting number of templates
+    int orignNumTemplates = mgr->getNumObjects();
+
+    // Source config for lights holds multiple light configurations.
+    // Create a single template for each defined light in configuration and
+    // register it.
+    mgr->createObject(handle, true);
+    // get number of templates loaded
+    int numLoadedLights = mgr->getNumObjects();
+    // verify lights were added
+    ASSERT_NE(numLoadedLights, orignNumTemplates);
+
+    // get handles of all lights added
+    auto lightHandles = mgr->getObjectHandlesBySubstring();
+    ASSERT_EQ(lightHandles.size(), numLoadedLights);
+
+    // remove all added handles
+    for (auto handle : lightHandles) {
+      mgr->removeObjectByHandle(handle);
+    }
     // verify there are same number of templates as when we started
     ASSERT_EQ(orignNumTemplates, mgr->getNumObjects());
 
@@ -358,6 +395,7 @@ class AttributesManagersTest : public testing::Test {
   }  // AttributesManagersTest::testAssetAttributesModRegRemove
 
   AttrMgrs::AssetAttributesManager::ptr assetAttributesManager_ = nullptr;
+  AttrMgrs::LightAttributesManager::ptr lightAttributesManager_ = nullptr;
   AttrMgrs::ObjectAttributesManager::ptr objectAttributesManager_ = nullptr;
   AttrMgrs::PhysicsAttributesManager::ptr physicsAttributesManager_ = nullptr;
   AttrMgrs::StageAttributesManager::ptr stageAttributesManager_ = nullptr;
@@ -384,6 +422,23 @@ TEST_F(AttributesManagersTest, AttributesManagers_JSONLoadTest) {
   ASSERT_EQ(physMgrAttr->getSimulator(), "bullet_test");
   ASSERT_EQ(physMgrAttr->getFrictionCoefficient(), 1.4);
   ASSERT_EQ(physMgrAttr->getRestitutionCoefficient(), 1.1);
+
+  auto lightAttr =
+      testBuildAttributesFromJSONString<AttrMgrs::LightAttributesManager,
+                                        Attrs::LightAttributes>(
+          lightAttributesManager_);
+  // verify exists
+  ASSERT_NE(nullptr, lightAttr);
+
+  // match values set in test JSON
+  // TODO : get these values programmatically?
+  ASSERT_EQ(lightAttr->getPosition(), Magnum::Vector3(2.5, 0.1, 3.8));
+  ASSERT_EQ(lightAttr->getDirection(), Magnum::Vector3(1.0, -1.0, 1.0));
+  ASSERT_EQ(lightAttr->getColor(), Magnum::Vector3(2, 1, -1));
+  ASSERT_EQ(lightAttr->getIntensity(), -0.1);
+  ASSERT_EQ(lightAttr->getType(), "spot");
+  ASSERT_EQ(lightAttr->getInnerConeAngle(), -0.75);
+  ASSERT_EQ(lightAttr->getOuterConeAngle(), -1.57);
 
   auto stageAttr =
       testBuildAttributesFromJSONString<AttrMgrs::StageAttributesManager,
@@ -452,9 +507,6 @@ TEST_F(AttributesManagersTest, AttributesManagersCreate) {
   std::string stageConfigFile = Cr::Utility::Directory::join(
       dataDir, "test_assets/scenes/simple_room.glb");
 
-  std::string objectConfigFile = Cr::Utility::Directory::join(
-      dataDir, "test_assets/objects/chair.phys_properties.json");
-
   LOG(INFO) << "Start Test : Create, Edit, Remove Attributes for "
                "PhysicsAttributesManager @ "
             << physicsConfigFile;
@@ -474,6 +526,9 @@ TEST_F(AttributesManagersTest, AttributesManagersCreate) {
                                                         stageConfigFile);
   testCreateAndRemoveDefault<AttrMgrs::StageAttributesManager>(
       stageAttributesManager_, stageConfigFile, true);
+
+  std::string objectConfigFile = Cr::Utility::Directory::join(
+      dataDir, "test_assets/objects/chair.object_config.json");
 
   LOG(INFO) << "Start Test : Create, Edit, Remove Attributes for "
                "ObjectAttributesManager @ "
@@ -510,6 +565,21 @@ TEST_F(AttributesManagersTest, AttributesManagersCreate) {
   ASSERT_EQ(origNumFileBased, newNumFileBased3);
   ASSERT_EQ(origNumPrimBased, newNumPrimBased3);
 }  // AttributesManagersTest::AttributesManagersCreate test
+
+TEST_F(AttributesManagersTest, LightAttributesManagerTest) {
+  LOG(INFO) << "Starting "
+               "AttributesManagersTest::LightAttributesManagerTest";
+
+  std::string lightConfigFile = Cr::Utility::Directory::join(
+      dataDir, "test_assets/lights/test_lights.lighting_config.json");
+
+  LOG(INFO) << "Start Test : Create, Edit, Remove Attributes for "
+               "LightAttributesManager @ "
+            << lightConfigFile;
+  // light attributes manager attributes verifcation
+  testCreateAndRemoveLights(lightAttributesManager_, lightConfigFile);
+
+}  // AttributesManagersTest::LightAttributesManagerTest
 
 /**
  * @brief test primitive asset attributes functionality in attirbutes managers.
