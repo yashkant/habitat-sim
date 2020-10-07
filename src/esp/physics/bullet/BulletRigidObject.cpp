@@ -324,8 +324,6 @@ bool BulletRigidObject::setMotionType(MotionType mt) {
     cInfo.m_startWorldTransform = bObjectRigidBody_->getWorldTransform();
     std::unique_ptr<btRigidBody> staticCollisionObject =
         std::make_unique<btRigidBody>(cInfo);
-    staticCollisionObject->setRestitution(0);
-    staticCollisionObject->setFriction(0.5);
     ASSERT(staticCollisionObject->isStaticObject());
     bWorld_->addRigidBody(
         staticCollisionObject.get(),
