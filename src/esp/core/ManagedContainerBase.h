@@ -331,7 +331,9 @@ class ManagedContainerBase {
 
   /**
    * @brief Get a list of all managed objects of passed type whose origin
-   * handles contain substr, ignoring subStr's case
+   * handles contain substr, ignoring subStr's case.
+   *
+   * This version works on std::map<int,std::string> maps' values.
    * @param mapOfHandles map containing the desired object-type managed object
    * handles
    * @param subStr substring to search for within existing primitive object
@@ -343,6 +345,25 @@ class ManagedContainerBase {
    */
   std::vector<std::string> getObjectHandlesBySubStringPerType(
       const std::map<int, std::string>& mapOfHandles,
+      const std::string& subStr,
+      bool contains) const;
+
+  /**
+   * @brief Get a list of all managed objects of passed type whose origin
+   * handles contain substr, ignoring subStr's case.
+   *
+   * This version works on std::map<std::string, std::set<std::string>> maps's
+   * keys.
+   * @param mapOfHandles map containing the desired keys to search.
+   * @param subStr substring to search for within existing primitive object
+   * managed objects
+   * @param contains Whether to search for handles containing, or not
+   * containting, substr
+   * @return vector of 0 or more managed object handles containing/not
+   * containing the passed substring
+   */
+  std::vector<std::string> getObjectHandlesBySubStringPerType(
+      const std::map<std::string, std::set<std::string>>& mapOfHandles,
       const std::string& subStr,
       bool contains) const;
 
