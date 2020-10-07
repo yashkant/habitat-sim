@@ -7,6 +7,25 @@
 namespace esp {
 namespace core {
 
+std::string ManagedContainerBase::convertFilenameToJSON(
+    const std::string& filename,
+    const std::string& jsonTypeExt) {
+  std::string strHandle = Cr::Utility::String::lowercase(filename);
+  std::string resHandle(filename);
+  if (std::string::npos ==
+      strHandle.find(Cr::Utility::String::lowercase(jsonTypeExt))) {
+    resHandle = Cr::Utility::Directory::splitExtension(filename).first + "." +
+                jsonTypeExt;
+    LOG(INFO) << "ManagedContainerBase::convertFilenameToJSON : Filename : "
+              << filename
+              << " changed to proposed JSON filename : " << resHandle;
+  } else {
+    LOG(INFO) << "ManagedContainerBase::convertFilenameToJSON : Filename : "
+              << filename << " determined to be legitimate JSON.";
+  }
+  return resHandle;
+}  // ManagedContainerBase::convertFilenameToJSON
+
 bool ManagedContainerBase::setLock(const std::string& objectHandle, bool lock) {
   // if managed object does not currently exist then do not attempt to modify
   // its lock state

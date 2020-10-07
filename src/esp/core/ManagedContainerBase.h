@@ -257,19 +257,7 @@ class ManagedContainerBase {
    * it was missing.
    */
   std::string convertFilenameToJSON(const std::string& filename,
-                                    const std::string& jsonTypeExt) {
-    std::string strHandle = Cr::Utility::String::lowercase(filename);
-    std::string resHandle(filename);
-    if (std::string::npos ==
-        strHandle.find(Cr::Utility::String::lowercase(jsonTypeExt))) {
-      resHandle = Cr::Utility::Directory::splitExtension(filename).first + "." +
-                  jsonTypeExt;
-    }
-    LOG(WARNING) << "ManagedContainerBase::convertFilenameToJSON : Filename : "
-                 << filename
-                 << " changed to proposed JSON filename : " << resHandle;
-    return resHandle;
-  }  // ManagedContainerBase::convertFilenameToJSON
+                                    const std::string& jsonTypeExt);
 
   /**
    * @brief This method will perform any necessary updating that is
