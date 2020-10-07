@@ -83,6 +83,47 @@ ManagedContainerBase::getObjectHandlesBySubStringPerType(
   return res;
 }  // ManagedContainerBase::getObjectHandlesBySubStringPerType
 
+std::vector<std::string>
+ManagedContainerBase::getObjectHandlesBySubStringPerType(
+    const std::map<std::string, std::set<std::string>>& mapOfHandles,
+    const std::string& subStr,
+    bool contains) const {
+  std::vector<std::string> res;
+  // if empty return empty vector
+  if (mapOfHandles.size() == 0) {
+    return res;
+  }
+  // if search string is empty, return all values
+  if (subStr.length() == 0) {
+    for (auto elem : mapOfHandles) {
+      res.push_back(elem.first);
+    }
+    return res;
+  }
+  // build search criteria
+  std::string strToLookFor = Cr::Utility::String::lowercase(subStr);
+
+  std::size_t strSize = strToLookFor.length();
+
+  for (std::map<std::string, std::set<std::string>>::const_iterator iter =
+           mapOfHandles.begin();
+       iter != mapOfHandles.end(); ++iter) {
+    std::string key = Cr::Utility::String::lowercase(iter->first);
+    // be sure that key is big enough to search in (otherwise find has undefined
+    // behavior)
+    if (key.length() < strSize) {
+      continue;
+    }
+    bool found = (std::string::npos != key.find(strToLookFor));
+    if (found == contains) {
+      // if found and searching for contains, or not found and searching for not
+      // contains
+      res.push_back(iter->first);
+    }
+  }
+  return res;
+}  // ManagedContainerBase::getObjectHandlesBySubStringPerType
+
 bool ManagedContainerBase::verifyLoadDocument(const std::string& filename,
                                               io::JsonDocument& jsonDoc) {
   if (isValidFileName(filename)) {
