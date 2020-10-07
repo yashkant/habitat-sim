@@ -301,23 +301,6 @@ scene::SceneGraph& Simulator::getActiveSemanticSceneGraph() {
   return sceneManager_->getSceneGraph(activeSemanticSceneID_);
 }
 
-bool operator==(const SimulatorConfiguration& a,
-                const SimulatorConfiguration& b) {
-  return a.scene == b.scene && a.defaultAgentId == b.defaultAgentId &&
-         a.defaultCameraUuid == b.defaultCameraUuid &&
-         a.compressTextures == b.compressTextures &&
-         a.createRenderer == b.createRenderer &&
-         a.enablePhysics == b.enablePhysics &&
-         a.physicsConfigFile.compare(b.physicsConfigFile) == 0 &&
-         a.loadSemanticMesh == b.loadSemanticMesh &&
-         a.sceneLightSetup.compare(b.sceneLightSetup) == 0;
-}
-
-bool operator!=(const SimulatorConfiguration& a,
-                const SimulatorConfiguration& b) {
-  return !(a == b);
-}
-
 // === Physics Simulator Functions ===
 
 int Simulator::addObject(const int objectLibId,
@@ -357,6 +340,13 @@ const Attrs::ObjectAttributes::cptr Simulator::getObjectInitializationTemplate(
     return physicsManager_->getObjectInitAttributes(objectId);
   }
   return nullptr;
+}
+
+esp::core::Configuration& Simulator::getObjectUserAttributes(
+    int objectId,
+    int sceneID) const {
+  assert(sceneHasPhysics(sceneID));
+  return physicsManager_->getObjectUserAttributes(objectId);
 }
 
 const Attrs::StageAttributes::cptr Simulator::getStageInitializationTemplate(

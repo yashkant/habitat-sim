@@ -294,7 +294,7 @@ class BulletRigidObject : public BulletBase,
    * @param linVel Linear velocity to set.
    */
   void setLinearVelocity(const Magnum::Vector3& linVel) override {
-    if (objectMotionType_ == MotionType::DYNAMIC) {
+    if (objectMotionType_ != MotionType::STATIC) {
       setActive();
       bObjectRigidBody_->setLinearVelocity(btVector3(linVel));
     }
@@ -310,7 +310,7 @@ class BulletRigidObject : public BulletBase,
    * angles.
    */
   void setAngularVelocity(const Magnum::Vector3& angVel) override {
-    if (objectMotionType_ == MotionType::DYNAMIC) {
+    if (objectMotionType_ != MotionType::STATIC) {
       setActive();
       bObjectRigidBody_->setAngularVelocity(btVector3(angVel));
     }

@@ -52,7 +52,7 @@ BulletRigidObject::~BulletRigidObject() {
   } else if (objectMotionType_ == MotionType::STATIC) {
     // remove collision objects from the world
     for (auto& co : bStaticCollisionObjects_) {
-      bWorld_->removeCollisionObject(co.get());
+      bWorld_->removeRigidBody(co.get());
       collisionObjToObjIds_->erase(co.get());
     }
   }
@@ -240,16 +240,19 @@ void BulletRigidObject::constructBulletCompoundFromMeshes(
             btVector3(transformFromLocalToWorld.transformPoint(v)), false);
       }
     } else {
-      bObjectConvexShapes_.emplace_back(std::make_unique<btConvexHullShape>(
-          static_cast<const btScalar*>(mesh.positions.data()->data()),
-          mesh.positions.size(), sizeof(Magnum::Vector3)));
+      bObjectConvexShapes_.emplace_back(std::make_unique<btConvexHullShape>());
+      // transform points into world space, including any scale/shear in
+      // transformFromLocalToWorld.
+      for (auto& v : mesh.positions) {
+        bObjectConvexShapes_.back()->addPoint(
+            btVector3(transformFromLocalToWorld.transformPoint(v)), false);
+      }
       bObjectConvexShapes_.back()->optimizeConvexHull();
       bObjectConvexShapes_.back()->initializePolyhedralFeatures();
-      // bObjectConvexShapes_.back()->setMargin(0.001);
       bObjectConvexShapes_.back()->setMargin(0.0);
       bObjectConvexShapes_.back()->recalcLocalAabb();
       //! Add to compound shape stucture
-      bObjectShape_->addChildShape(btTransform{transformFromLocalToWorld},
+      bObjectShape_->addChildShape(btTransform::getIdentity(),
                                    bObjectConvexShapes_.back().get());
     }
   }
@@ -291,7 +294,7 @@ bool BulletRigidObject::setMotionType(MotionType mt) {
 
   // remove the existing object from the world to change its type
   if (objectMotionType_ == MotionType::STATIC) {
-    bWorld_->removeCollisionObject(bStaticCollisionObjects_.back().get());
+    bWorld_->removeRigidBody(bStaticCollisionObjects_.back().get());
     collisionObjToObjIds_->erase(bStaticCollisionObjects_.back().get());
     bStaticCollisionObjects_.clear();
   } else {
@@ -304,6 +307,8 @@ bool BulletRigidObject::setMotionType(MotionType mt) {
       // we need to construct a new rigidBody configured for kinematics
       constructRigidBody(true);
     }
+    bObjectRigidBody_->setLinearVelocity({});
+    bObjectRigidBody_->setAngularVelocity({});
     objectMotionType_ = MotionType::KINEMATIC;
     bWorld_->addRigidBody(bObjectRigidBody_.get());
     setActive();
@@ -311,19 +316,18 @@ bool BulletRigidObject::setMotionType(MotionType mt) {
   } else if (mt == MotionType::STATIC) {
     objectMotionType_ = MotionType::STATIC;
 
-    // create a static collision object at the current transform
-    std::unique_ptr<btCollisionObject> staticCollisionObject =
-        std::make_unique<btCollisionObject>();
-    staticCollisionObject->setCollisionShape(bObjectShape_.get());
-    staticCollisionObject->setWorldTransform(
-        bObjectRigidBody_->getWorldTransform());
-    staticCollisionObject->activate(true);
-    staticCollisionObject->setActivationState(DISABLE_DEACTIVATION);
+    // mass == 0 to indicate static. See isStaticObject assert below. See also
+    // examples/MultiThreadedDemo/CommonRigidBodyMTBase.h
+    btVector3 localInertia(0, 0, 0);
+    btRigidBody::btRigidBodyConstructionInfo cInfo(
+        /*mass*/ 0.0, nullptr, bObjectShape_.get(), localInertia);
+    cInfo.m_startWorldTransform = bObjectRigidBody_->getWorldTransform();
+    std::unique_ptr<btRigidBody> staticCollisionObject =
+        std::make_unique<btRigidBody>(cInfo);
     staticCollisionObject->setRestitution(0);
-    // staticCollisionObject->setRollingFriction(1.0);
-    // staticCollisionObject->setSpinningFriction(1.0);
     staticCollisionObject->setFriction(0.5);
-    bWorld_->addCollisionObject(
+    ASSERT(staticCollisionObject->isStaticObject());
+    bWorld_->addRigidBody(
         staticCollisionObject.get(),
         2,       // collisionFilterGroup (2 == StaticFilter)
         1 + 2);  // collisionFilterMask (1 == DefaultFilter, 2==StaticFilter)

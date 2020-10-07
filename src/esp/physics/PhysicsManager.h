@@ -912,6 +912,17 @@ class PhysicsManager {
     return results;
   }
 
+  virtual int getNumActiveContactPoints() { return -1; }
+
+  /**
+   * @brief Get access to an object's data container for user values of various
+   * types. Habitat-sim does not use or edit this container.
+   */
+  esp::core::Configuration& getObjectUserAttributes(int physObjectID) const {
+    assertIDValidity(physObjectID);
+    return existingObjects_.at(physObjectID)->attributes_;
+  }
+
  protected:
   /** @brief Check that a given object ID is valid (i.e. it refers to an
    * existing object). Terminate the program and report an error if not. This

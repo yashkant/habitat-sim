@@ -72,6 +72,106 @@ std::string getCurrentTimeString() {
          std::to_string(ltm->tm_min) + "-" + std::to_string(ltm->tm_sec);
 }
 
+enum MouseInteractionMode {
+  LOOK,
+  ADD,
+  REMOVE,
+  GRAB,
+  THROW,
+
+  NUM_MODES
+};
+
+std::string getEnumName(MouseInteractionMode mode) {
+  switch (mode) {
+    case (GRAB):
+      return "GRAB";
+      break;
+    case (ADD):
+      return "ADD";
+      break;
+    case (REMOVE):
+      return "REMOVE";
+      break;
+    case (THROW):
+      return "THROW";
+      break;
+    case (LOOK):
+      return "LOOK";
+      break;
+    default:
+      return "NONE";
+  }
+}
+
+struct MouseGrabber {
+  esp::core::RigidState targetFrame;
+  float gripDepth;
+  esp::sim::Simulator* simulator_;
+
+  int mode = 0;  // left (0) or right (1) click.
+
+  MouseGrabber(const Magnum::Vector3& clickPos,
+               float _gripDepth,
+               esp::sim::Simulator* sim) {
+    simulator_ = sim;
+    targetFrame.translation = clickPos;
+    gripDepth = _gripDepth;
+  }
+
+  virtual ~MouseGrabber() {}
+
+  virtual void updateTarget(const esp::core::RigidState& newTarget) {
+    targetFrame = newTarget;
+  }
+};
+
+struct MouseObjectKinematicGrabber : public MouseGrabber {
+  int objectId;
+  Magnum::Vector3 clickOffset;
+  esp::physics::MotionType originalMotionType;
+
+  //! Used to set object velocity to match state change. Clear after each
+  //! simulation step.
+  esp::core::RigidState previousState;
+  MouseObjectKinematicGrabber(const Magnum::Vector3& clickPos,
+                              float _gripDepth,
+                              int _objectId,
+                              esp::sim::Simulator* sim)
+      : MouseGrabber(clickPos, _gripDepth, sim) {
+    objectId = _objectId;
+    Magnum::Vector3 origin = simulator_->getTranslation(objectId);
+    clickOffset = origin - clickPos;
+    originalMotionType = simulator_->getObjectMotionType(objectId);
+    targetFrame.rotation = simulator_->getRotation(objectId);
+    previousState = targetFrame;
+    simulator_->setObjectMotionType(esp::physics::MotionType::KINEMATIC,
+                                    objectId);
+  }
+
+  virtual ~MouseObjectKinematicGrabber() override {
+    Corrade::Utility::Debug()
+        << "~MouseObjectKinematicGrabber final origin pos: "
+        << simulator_->getTranslation(objectId);
+    simulator_->setObjectMotionType(originalMotionType, objectId);
+  }
+
+  virtual void updateTarget(const esp::core::RigidState& newTarget) override {
+    Magnum::Vector3 objectOrigin = simulator_->getTranslation(objectId);
+    simulator_->setTranslation(clickOffset + newTarget.translation, objectId);
+    simulator_->setRotation(newTarget.rotation, objectId);
+  }
+
+  //! update
+  void updateVelAndCache(float dt) {
+    Mn::Debug{} << "vel before = " << simulator_->getLinearVelocity(objectId);
+    simulator_->setLinearVelocity(
+        (targetFrame.translation - previousState.translation) / dt, objectId);
+    Mn::Debug{} << "vel after = " << simulator_->getLinearVelocity(objectId);
+    previousState = targetFrame;
+  }
+};
+
 using namespace Mn::Math::Literals;
 
 class Viewer : public Mn::Platform::Application {
@@ -85,6 +185,11 @@ class Viewer : public Mn::Platform::Application {
   void mouseReleaseEvent(MouseEvent& event) override;
   void mouseMoveEvent(MouseMoveEvent& event) override;
   void mouseScrollEvent(MouseScrollEvent& event) override;
+
+  MouseInteractionMode mouseInteractionMode = LOOK;
+
+  std::unique_ptr<MouseGrabber> mouseGrabber_ = nullptr;
+
   void keyPressEvent(KeyEvent& event) override;
 
   void reloadLights(std::string filepath) {
@@ -131,11 +236,19 @@ class Viewer : public Mn::Platform::Application {
     }
   }
 
-  void loadObjectInstances(std::string filepath) {
+  std::string lightingSetupFile_ = "";
+
+  /**
+   * @brief load object instance data from json format.
+   * @param indexToID map of json object index to RigidObject ID for state
+   * re-saving.
+   */
+  void loadObjectInstances(std::string filepath,
+                           std::map<int, int>& indexToID) {
     Mn::Debug{} << "loadObjectInstances: " << filepath;
-    esp::io::JsonDocument jsonConfig;
     try {
-      jsonConfig = esp::io::parseJsonFile(filepath);
+      objectJsonConfig_ = esp::io::parseJsonFile(filepath);
+      indexToID.clear();
     } catch (...) {
       LOG(INFO) << filepath << " parse failed";
       return;
@@ -144,27 +257,32 @@ class Viewer : public Mn::Platform::Application {
     static const char* kTypeNames[] = {"Null",  "False",  "True",  "Object",
                                        "Array", "String", "Number"};
     std::map<int, std::string> idToObject;
-    for (auto& m : jsonConfig.GetObject()) {
+    const auto& objects = objectJsonConfig_["object instances"];
+    for (rapidjson::SizeType i = 0; i < objects.Size(); i++) {
+      const auto& object = objects[i];
       bool parseSuccess = true;
-      Mn::Debug{} << m.name.GetString() << ": ";
-      std::string objectString = m.value["object"].GetString();
+      // Mn::Debug{} << object.name.GetString() << ": ";
+      std::string objectString =
+          object.FindMember("template_name")->value.GetString();
       Mn::Debug{} << "  \"object\": " << objectString;
-      const auto& transVal = m.value["translation"].GetArray();
-      const auto& rotVal = m.value["rotation"].GetArray();
-      const auto& scaleVal = m.value["scale"].GetArray();
+      const auto& transVal = object.FindMember("translation")->value.GetArray();
+      const auto& rotVal = object.FindMember("rotation")->value.GetArray();
       Mn::Vector3 translation =
           Mn::Vector3(transVal[0].GetDouble(), transVal[1].GetDouble(),
                       transVal[2].GetDouble());
-      Mn::Vector3 scale =
-          Mn::Vector3(scaleVal[0].GetDouble(), scaleVal[1].GetDouble(),
-                      scaleVal[2].GetDouble());
       Mn::Quaternion rotation = Mn::Quaternion(
           Mn::Vector3(rotVal[1].GetDouble(), rotVal[2].GetDouble(),
                       rotVal[3].GetDouble()),
           rotVal[0].GetDouble());
       Mn::Debug{} << "  \"translation\": " << translation;
       Mn::Debug{} << "  \"rotation\": " << rotation;
-      Mn::Debug{} << "  \"scale\": " << scale;
+
+      // TODO:scale?
+      // const auto& scaleVal = object.FindMember("scale")->value.GetArray();
+      // Mn::Vector3 scale =
+      //    Mn::Vector3(scaleVal[0].GetDouble(), scaleVal[1].GetDouble(),
+      //                scaleVal[2].GetDouble());
+      // Mn::Debug{} << "  \"scale\": " << scale;
 
       // Instance the object
       auto templateHandles =
@@ -180,22 +298,20 @@ class Viewer : public Mn::Platform::Application {
 
       auto objTemplate =
           objectAttrManager_->getObjectByHandle(templateHandles[0]);
-      objTemplate->setMargin(0.04);
-      objTemplate->setFrictionCoefficient(0.7);
-      objTemplate->setRestitutionCoefficient(0.05);
+      // objTemplate->setMargin(0.04);
+      // objTemplate->setFrictionCoefficient(0.7);
+      // objTemplate->setRestitutionCoefficient(0.0);
       objTemplate->setMass(mass);
       objectAttrManager_->registerObject(objTemplate, templateHandles[0]);
 
-      // convert translation from Blender to Habitat coordinate system
-      auto frameQuat = Mn::Quaternion::rotation(Mn::Deg(-90), {1.0, 0, 0});
-      translation = frameQuat.transformVector(translation);
-
       auto obID = simulator_->addObjectByHandle(templateHandles[0]);
       idToObject[obID] = objectString;
+      indexToID[i] = obID;
       simulator_->setTranslation(translation, obID);
-      simulator_->setRotation(frameQuat * rotation, obID);
+      simulator_->setRotation(rotation, obID);
 
-      std::string motionTypeString = m.value["motiontype"].GetString();
+      std::string motionTypeString =
+          object.FindMember("motiontype")->value.GetString();
       if (motionTypeString == "STATIC") {
         simulator_->setObjectMotionType(esp::physics::MotionType::STATIC, obID);
       } else if (motionTypeString == "KINEMATIC") {
@@ -214,6 +330,48 @@ class Viewer : public Mn::Platform::Application {
       auto inContact = simulator_->contactTest(id2Obj.first);
       Mn::Debug{} << "Object " << id2Obj.second << " contact = " << inContact;
     }
+  }
+
+  std::string objectInstanceFile_ = "";
+  esp::io::JsonDocument objectJsonConfig_;
+
+  std::map<int, int> objectJsonIndexToID_;
+
+  /**
+   * @brief re-save the scene_instance json last loaded with new object states
+   * (e.g. after simulation settling)
+   * @param jsonIndexToObjectID a map of json index to object ids for
+   * correspondance between json doc and scene state.
+   */
+  void saveAdjustedObjectInstances(
+      std::string filepath,
+      const std::map<int, int>& jsonIndexToObjectID) {
+    Mn::Debug{} << "Starting saveAdjustedObjectInstances to " << filepath;
+
+    // start with the original json doc
+    auto& objects = objectJsonConfig_["object instances"];
+    esp::io::JsonDocument::AllocatorType& allocator =
+        objectJsonConfig_.GetAllocator();
+    for (rapidjson::SizeType i = 0; i < objects.Size(); i++) {
+      auto state = simulator_->getRigidState(jsonIndexToObjectID.at(i));
+
+      auto& object = objects[i];
+      auto& translation = object.FindMember("translation")->value;
+      translation.Clear();
+      for (int j = 0; j < 3; ++j) {
+        translation.PushBack(state.translation[j], allocator);
+      }
+
+      auto& rotation = object.FindMember("rotation")->value;
+      rotation.Clear();
+      rotation.PushBack(state.rotation.scalar(), allocator);
+      for (int j = 0; j < 3; ++j) {
+        rotation.PushBack(state.rotation.vector()[j], allocator);
+      }
+    }
+    bool writeSuccess = esp::io::writeJsonToFile(objectJsonConfig_, filepath);
+
+    Mn::Debug{} << "  DONE - Success? " << writeSuccess;
   }
 
   void setupDirectionalLights() {
@@ -244,14 +402,16 @@ class Viewer : public Mn::Platform::Application {
   };
 
   // Interactive functions
-  void addObject(const std::string& configHandle);
-  void addObject(int objID);
+  int addObject(const std::string& configHandle);
+  int addObject(int objID);
 
   // add template-derived object
-  void addTemplateObject();
+  int addTemplateObject();
 
   // add primiitive object
-  void addPrimitiveObject();
+  int addPrimitiveObject();
+
+  int throwSphere(Magnum::Vector3 direction);
 
   void pokeLastObject();
   void pushLastObject();
@@ -465,6 +625,7 @@ Viewer::Viewer(const Arguments& arguments)
   if (Cr::Utility::String::endsWith(lightConfig, ".json")) {
     lightConfig = Cr::Utility::Directory::join(
         Corrade::Utility::Directory::current(), lightConfig);
+    lightingSetupFile_ = lightConfig;
     reloadLights(lightConfig);
   }
 
@@ -478,7 +639,8 @@ Viewer::Viewer(const Arguments& arguments)
   if (Cr::Utility::String::endsWith(sceneConfig, ".json")) {
     sceneConfig = Cr::Utility::Directory::join(
         Corrade::Utility::Directory::current(), sceneConfig);
-    loadObjectInstances(sceneConfig);
+    objectInstanceFile_ = sceneConfig;
+    loadObjectInstances(sceneConfig, objectJsonIndexToID_);
   }
 
   // NavMesh customization options
@@ -556,13 +718,13 @@ Viewer::Viewer(const Arguments& arguments)
   printHelpText();
 }  // end Viewer::Viewer
 
-void Viewer::addObject(int ID) {
+int Viewer::addObject(int ID) {
   const std::string& configHandle =
       simulator_->getObjectAttributesManager()->getObjectHandleByID(ID);
-  addObject(configHandle);
+  return addObject(configHandle);
 }  // addObject
 
-void Viewer::addObject(const std::string& configFile) {
+int Viewer::addObject(const std::string& configFile) {
   // Relative to agent bodynode
   Mn::Matrix4 T = agentBodyNode_->MagnumObject::transformationMatrix();
   Mn::Vector3 new_pos = T.transformPoint({0.1f, 1.5f, -2.0f});
@@ -570,28 +732,33 @@ void Viewer::addObject(const std::string& configFile) {
   int physObjectID = simulator_->addObjectByHandle(configFile);
   simulator_->setTranslation(new_pos, physObjectID);
   // simulator_->setRotation(esp::core::randomRotation(), physObjectID);
+  return physObjectID;
 }  // addObject
 
 // add file-based template derived object from keypress
-void Viewer::addTemplateObject() {
+int Viewer::addTemplateObject() {
   int numObjTemplates = objectAttrManager_->getNumFileTemplateObjects();
+  int physObjectID = esp::ID_UNDEFINED;
   if (numObjTemplates > 0) {
-    addObject(objectAttrManager_->getRandomFileTemplateHandle());
-  } else
+    physObjectID = addObject(objectAttrManager_->getRandomFileTemplateHandle());
+  } else {
     LOG(WARNING) << "No objects loaded, can't add any";
-
+  }
+  return physObjectID;
 }  // addTemplateObject
 
-// add synthesized primiitive object from keypress
-void Viewer::addPrimitiveObject() {
+// add synthesized primitive object from keypress
+int Viewer::addPrimitiveObject() {
   // TODO : use this to implement synthesizing rendered physical objects
-
+  int physObjectID = esp::ID_UNDEFINED;
   int numObjPrims = objectAttrManager_->getNumSynthTemplateObjects();
   if (numObjPrims > 0) {
-    addObject(objectAttrManager_->getRandomSynthTemplateHandle());
-  } else
+    physObjectID =
+        addObject(objectAttrManager_->getRandomSynthTemplateHandle());
+  } else {
     LOG(WARNING) << "No primitive templates available, can't add any objects";
-
+  }
+  return physObjectID;
 }  // addPrimitiveObject
 
 void Viewer::removeLastObject() {
@@ -600,6 +767,30 @@ void Viewer::removeLastObject() {
     return;
   }
   simulator_->removeObject(existingObjectIDs.back());
+}
+
+int Viewer::throwSphere(Mn::Vector3 direction) {
+  Mn::Matrix4 T =
+      agentBodyNode_
+          ->MagnumObject::transformationMatrix();  // Relative to agent bodynode
+
+  auto new_pos = Mn::Vector3(defaultAgent_->getSensorSuite()
+                                 .get("rgba_camera")
+                                 ->specification()
+                                 ->position);
+  new_pos = T.transformPoint(new_pos);
+
+  std::string sphere_handle =
+      simulator_->getObjectAttributesManager()
+          ->getSynthTemplateHandlesBySubstring("uvSphereSolid")[0];
+  int physObjectID = simulator_->addObjectByHandle(sphere_handle);
+  simulator_->setTranslation(new_pos, physObjectID);
+
+  // throw the object
+  Mn::Vector3 impulse = direction * 10;
+  Mn::Vector3 rel_pos = Mn::Vector3(0.0f, 0.0f, 0.0f);
+  simulator_->applyImpulse(impulse, rel_pos, physObjectID);
+  return physObjectID;
 }
 
 void Viewer::invertGravity() {
@@ -671,14 +862,22 @@ void Viewer::wiggleLastObject() {
 }
 
 float timeSinceLastSimulation = 0.0;
+float simStepSize = 1.0 / 60.0;
 void Viewer::drawEvent() {
   Mn::GL::defaultFramebuffer.clear(Mn::GL::FramebufferClear::Color |
                                    Mn::GL::FramebufferClear::Depth);
 
   // step physics at a fixed rate
   timeSinceLastSimulation += timeline_.previousFrameDuration();
-  if (timeSinceLastSimulation >= 1.0 / 60.0 && simulating_) {
-    simulator_->stepWorld(1.0 / 60.0);
+  if (timeSinceLastSimulation >= simStepSize && simulating_) {
+    if (mouseGrabber_ != nullptr) {
+      auto kinMouseGrabber =
+          dynamic_cast<MouseObjectKinematicGrabber*>(mouseGrabber_.get());
+      if (kinMouseGrabber != nullptr) {
+        kinMouseGrabber->updateVelAndCache(simStepSize);
+      }
+    }
+    simulator_->stepWorld(simStepSize);
     timeSinceLastSimulation = 0.0;
   }
 
@@ -737,19 +936,24 @@ void Viewer::drawEvent() {
   Mn::GL::defaultFramebuffer.bind();
 
   imgui_.newFrame();
+  // Show mouseInteractionMode
+  ImGui::SetNextWindowPos(ImVec2(10, 10));
+  ImGui::Begin("main", NULL,
+               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
+                   ImGuiWindowFlags_AlwaysAutoResize);
+  ImGui::SetWindowFontScale(2.0);
+  std::string mouseModeText =
+      "Mouse Mode: " + getEnumName(mouseInteractionMode);
+  ImGui::Text(mouseModeText.c_str());
 
   if (showFPS_) {
-    ImGui::SetNextWindowPos(ImVec2(10, 10));
-    ImGui::Begin("main", NULL,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
-                     ImGuiWindowFlags_AlwaysAutoResize);
-    ImGui::SetWindowFontScale(2.0);
     ImGui::Text("%.1f FPS", Mn::Double(ImGui::GetIO().Framerate));
     uint32_t total = activeSceneGraph_->getDrawables().size();
     ImGui::Text("%u drawables", total);
     ImGui::Text("%u culled", total - visibles);
-    ImGui::End();
   }
+
+  ImGui::End();
 
   /* Set appropriate states. If you only draw ImGui, it is sufficient to
      just enable blending and scissor test in the constructor. */
@@ -803,6 +1007,7 @@ void Viewer::createPickedObjectVisualizer(unsigned int objectId) {
 }
 
 void Viewer::mousePressEvent(MouseEvent& event) {
+  event.setAccepted();
   if (event.button() == MouseEvent::Button::Right &&
       (event.modifiers() & MouseEvent::Modifier::Shift)) {
     // cannot use the default framebuffer, so setup another framebuffer,
@@ -828,41 +1033,54 @@ void Viewer::mousePressEvent(MouseEvent& event) {
     return;
   }  // drawable selection
 
-  // add primitive w/ right click if a collision object is hit by a raycast
-  else if (event.button() == MouseEvent::Button::Right) {
-    if (simulator_->getPhysicsSimulationLibrary() !=
-        esp::physics::PhysicsManager::PhysicsSimulationLibrary::NONE) {
-      auto viewportPoint = event.position();
-      auto ray = renderCamera_->unproject(viewportPoint);
-      esp::physics::RaycastResults raycastResults = simulator_->castRay(ray);
-
-      if (raycastResults.hasHits()) {
-        addPrimitiveObject();
-        auto existingObjectIDs = simulator_->getExistingObjectIDs();
+  auto viewportPoint = event.position();
+  auto ray = renderCamera_->unproject(viewportPoint);
+  if (mouseInteractionMode == THROW) {
+    throwSphere(ray.direction);
+    return;
+  }
+  esp::physics::RaycastResults raycastResults = simulator_->castRay(ray);
+  if (raycastResults.hasHits()) {
+    auto hitInfo = raycastResults.hits[0];
+    if (mouseInteractionMode == ADD) {
+      if (event.button() == MouseEvent::Button::Left) {
+        // add primitive w/ left click if a collision object is hit by a raycast
+        // NOTE: right click and drag to select a object for placement
+        int objID = addPrimitiveObject();
         // use the bounding box to create a safety margin for adding the object
-        float boundingBuffer =
-            simulator_->getObjectSceneNode(existingObjectIDs.back())
-                    ->computeCumulativeBB()
-                    .size()
-                    .max() /
-                2.0 +
-            0.04;
+        float boundingBuffer = simulator_->getObjectSceneNode(objID)
+                                       ->computeCumulativeBB()
+                                       .size()
+                                       .max() /
+                                   2.0 +
+                               0.04;
         simulator_->setTranslation(
-            raycastResults.hits[0].point +
-                raycastResults.hits[0].normal * boundingBuffer,
-            existingObjectIDs.back());
+            hitInfo.point + hitInfo.normal * boundingBuffer, objID);
 
-        simulator_->setRotation(esp::core::randomRotation(),
-                                existingObjectIDs.back());
+        simulator_->setRotation(esp::core::randomRotation(), objID);
+      }  // end add primitive w/ left click
+    } else if (mouseInteractionMode == REMOVE) {
+      if (hitInfo.objectId >= 0) {
+        simulator_->removeObject(hitInfo.objectId);
+      }
+    } else if (mouseInteractionMode == GRAB) {
+      if (hitInfo.objectId >= 0) {
+        mouseGrabber_ = std::make_unique<MouseObjectKinematicGrabber>(
+            hitInfo.point,
+            (hitInfo.point - renderCamera_->node().translation()).length(),
+            hitInfo.objectId, simulator_.get());
+        if (event.button() == MouseEvent::Button::Right) {
+          mouseGrabber_->mode = 1;
+        }
       }
     }
-  }  // end add primitive w/ right click
-
-  event.setAccepted();
-  redraw();
+  }
 }
 
 void Viewer::mouseReleaseEvent(MouseEvent& event) {
+  if (mouseInteractionMode == GRAB) {
+    mouseGrabber_ = nullptr;
+  }
   event.setAccepted();
 }
 
@@ -871,25 +1089,72 @@ void Viewer::mouseScrollEvent(MouseScrollEvent& event) {
     return;
   }
 
+  if (mouseGrabber_ != nullptr) {
+    if (mouseGrabber_->mode == 0) {  // LEFT click
+      // adjust the grabber depth
+      auto ray = renderCamera_->unproject(event.position());
+      mouseGrabber_->gripDepth += event.offset().y() * 0.01;
+      mouseGrabber_->targetFrame.translation =
+          renderCamera_->node().absoluteTranslation() +
+          ray.direction * mouseGrabber_->gripDepth;
+      mouseGrabber_->updateTarget(mouseGrabber_->targetFrame);
+    } else if (mouseGrabber_->mode == 1) {  // RIGHT click
+      // roll the object
+      auto roll_quat = Mn::Quaternion::rotation(
+          Mn::Deg(event.offset().y()),
+          defaultAgent_->node().transformation().transformVector({0, 0, -1.0}));
+      mouseGrabber_->targetFrame.rotation =
+          roll_quat * mouseGrabber_->targetFrame.rotation;
+      mouseGrabber_->updateTarget(mouseGrabber_->targetFrame);
+    }
+  } else {
+    // change the mouse interaction mode
+    int delta = 1;
+    if (event.offset().y() < 0)
+      delta = -1;
+    mouseInteractionMode = MouseInteractionMode(
+        (int(mouseInteractionMode) + delta) % int(NUM_MODES));
+    if (mouseInteractionMode < 0)
+      mouseInteractionMode = MouseInteractionMode(int(NUM_MODES) - 1);
+  }
+
   redraw();
 
   event.setAccepted();
 }
 
 void Viewer::mouseMoveEvent(MouseMoveEvent& event) {
-  if (!(event.buttons() & MouseMoveEvent::Button::Left)) {
-    return;
+  const Mn::Vector2i delta = event.relativePosition();
+
+  if (mouseGrabber_ != nullptr) {
+    if (event.buttons() & MouseMoveEvent::Button::Left) {
+      auto ray = renderCamera_->unproject(event.position());
+      mouseGrabber_->targetFrame.translation =
+          renderCamera_->node().absoluteTranslation() +
+          ray.direction * mouseGrabber_->gripDepth;
+      mouseGrabber_->updateTarget(mouseGrabber_->targetFrame);
+    } else if (event.buttons() & MouseMoveEvent::Button::Right) {
+      auto y_quat = Mn::Quaternion::rotation(Mn::Deg(delta.x()), {0, 1.0, 0});
+      auto x_quat = Mn::Quaternion::rotation(
+          Mn::Deg(delta.y()),
+          defaultAgent_->node().transformation().transformVector({1.0, 0, 0}));
+      mouseGrabber_->targetFrame.rotation =
+          x_quat * y_quat * mouseGrabber_->targetFrame.rotation;
+      mouseGrabber_->updateTarget(mouseGrabber_->targetFrame);
+    }
   }
 
-  const Mn::Vector2i delta = event.relativePosition();
-  auto& controls = *defaultAgent_->getControls().get();
-  controls(*agentBodyNode_, "turnRight", delta.x());
-  // apply the transformation to all sensors
-  for (auto p : defaultAgent_->getSensorSuite().getSensors()) {
-    controls(p.second->object(),  // SceneNode
-             "lookDown",          // action name
-             delta.y(),           // amount
-             false);              // applyFilter
+  if (mouseInteractionMode == LOOK &&
+      (event.buttons() & MouseMoveEvent::Button::Left)) {
+    auto& controls = *defaultAgent_->getControls().get();
+    controls(*agentBodyNode_, "turnRight", delta.x());
+    // apply the transformation to all sensors
+    for (auto p : defaultAgent_->getSensorSuite().getSensors()) {
+      controls(p.second->object(),  // SceneNode
+               "lookDown",          // action name
+               delta.y(),           // amount
+               false);              // applyFilter
+    }
   }
 
   redraw();
@@ -982,6 +1247,11 @@ void Viewer::keyPressEvent(KeyEvent& event) {
       simulator_->setNavMeshVisualization(
           !simulator_->isNavMeshVisualizationActive());
       break;
+    case KeyEvent::Key::M:
+      if (simulator_->getPathFinder()->isLoaded()) {
+        simulator_->getPathFinder()->saveNavMesh("navmesh_output.navmesh");
+      }
+      break;
     case KeyEvent::Key::I:
       screenshot();
       break;
@@ -1002,6 +1272,21 @@ void Viewer::keyPressEvent(KeyEvent& event) {
     case KeyEvent::Key::L:
       setupDirectionalLights();
       break;
+    case KeyEvent::Key::R: {
+      // reset the physics scene
+      esp::agent::AgentState::ptr agentState = esp::agent::AgentState::create();
+      simulator_->getAgent(0)->getState(agentState);
+      defaultAgent_->setInitialState(*agentState, false);
+      for (auto objId : simulator_->getExistingObjectIDs()) {
+        simulator_->removeObject(objId);
+      }
+      simulator_->reset();
+      reloadLights(lightingSetupFile_);
+      loadObjectInstances(objectInstanceFile_, objectJsonIndexToID_);
+    } break;
+    case KeyEvent::Key::J: {
+      saveAdjustedObjectInstances(objectInstanceFile_, objectJsonIndexToID_);
+    } break;
     default:
       break;
   }
