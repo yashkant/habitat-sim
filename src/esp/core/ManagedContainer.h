@@ -512,9 +512,10 @@ class ManagedContainer : public ManagedContainerBase {
   }  // ManagedContainer::
 
   /**
-   * @brief This function will build the appropriate function pointer map for
-   * this container's managed object, keyed on the managed object's class
-   * type.
+   * @brief This function will build the appropriate @ref copyConstructorMap_
+   * copy constructor function pointer map for this container's managed object,
+   * keyed on the managed object's class type.  This MUST be called in the
+   * constructor of the -instancing- class.
    */
   virtual void buildCtorFuncPtrMaps() = 0;
 
@@ -620,7 +621,7 @@ auto ManagedContainer<T>::removeObjectsBySubstring(const std::string& subStr,
     }
   }
   return res;
-}  // removeAllObjects
+}  // ManagedContainer<T>::removeObjectsBySubstring
 
 template <class T>
 auto ManagedContainer<T>::removeObjectInternal(const std::string& objectHandle,
@@ -648,7 +649,7 @@ auto ManagedContainer<T>::removeObjectInternal(const std::string& objectHandle,
   // holding them.
   deleteObjectInternal(attribsTemplate->getID(), objectHandle);
   return attribsTemplate;
-}  // ManagedContainer::removeObjectByHandle
+}  // ManagedContainer::removeObjectInternal
 
 }  // namespace core
 }  // namespace esp
