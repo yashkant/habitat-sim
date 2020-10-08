@@ -65,9 +65,9 @@ class AttributesManagersTest : public testing::Test {
    * @return attributes template built from JSON parsed from string
    */
   template <typename T, typename U>
-  std::shared_ptr<U> testBuildAttributesFromJSONString(std::shared_ptr<T> mgr) {
-    // get JSON sample config from static Attributes string
-    const std::string& jsonString = U::JSONConfigTestString;
+  std::shared_ptr<U> testBuildAttributesFromJSONString(
+      std::shared_ptr<T> mgr,
+      const std::string& jsonString) {
     // create JSON document
     try {
       esp::io::JsonDocument tmp = esp::io::parseJsonString(jsonString);
@@ -409,17 +409,24 @@ class AttributesManagersTest : public testing::Test {
 };  // class AttributesManagersTest
 
 /**
- * @brief This test will verify that the attributes' managers' JSON loading
- * process is working as expected.
+ * @brief This test will verify that the physics attributes' managers' JSON
+ * loading process is working as expected.
  */
-TEST_F(AttributesManagersTest, AttributesManagers_JSONLoadTest) {
-  LOG(INFO)
-      << "Starting AttributesManagersTest::AttributesManagers_JSONLoadTest";
-
+TEST_F(AttributesManagersTest, AttributesManagers_PhysicsJSONLoadTest) {
+  LOG(INFO) << "Starting "
+               "AttributesManagersTest::AttributesManagers_PhysicsJSONLoadTest";
+  // build JSON sample config
+  const std::string& jsonString = R"({
+      "physics simulator": "bullet_test",
+      "timestep": 1.0,
+      "gravity": [1,2,3],
+      "friction coefficient": 1.4,
+      "restitution coefficient": 1.1
+    })";
   auto physMgrAttr =
       testBuildAttributesFromJSONString<AttrMgrs::PhysicsAttributesManager,
                                         Attrs::PhysicsManagerAttributes>(
-          physicsAttributesManager_);
+          physicsAttributesManager_, jsonString);
   // verify exists
   ASSERT_NE(nullptr, physMgrAttr);
   // match values set in test JSON
@@ -429,11 +436,36 @@ TEST_F(AttributesManagersTest, AttributesManagers_JSONLoadTest) {
   ASSERT_EQ(physMgrAttr->getSimulator(), "bullet_test");
   ASSERT_EQ(physMgrAttr->getFrictionCoefficient(), 1.4);
   ASSERT_EQ(physMgrAttr->getRestitutionCoefficient(), 1.1);
+}  // AttributesManagers_PhysicsJSONLoadTest
+
+/**
+ * @brief This test will verify that the Light Attributes' managers' JSON
+ * loading process is working as expected.
+ */
+TEST_F(AttributesManagersTest, AttributesManagers_LightJSONLoadTest) {
+  LOG(INFO) << "Starting "
+               "AttributesManagersTest::AttributesManagers_LightJSONLoadTest";
+  // build JSON sample config
+  const std::string& jsonString = R"({
+  "lights":{
+      "test":{
+        "position": [2.5,0.1,3.8],
+        "direction": [1.0,-1.0,1.0],
+        "intensity": -0.1,
+        "color": [2,1,-1],
+        "type": "spot",
+        "spot": {
+          "innerConeAngle": -0.75,
+          "outerConeAngle": -1.57
+        }
+      }
+    }
+  })";
 
   auto lightAttr =
       testBuildAttributesFromJSONString<AttrMgrs::LightAttributesManager,
                                         Attrs::LightAttributes>(
-          lightAttributesManager_);
+          lightAttributesManager_, jsonString);
   // verify exists
   ASSERT_NE(nullptr, lightAttr);
 
@@ -446,11 +478,47 @@ TEST_F(AttributesManagersTest, AttributesManagers_JSONLoadTest) {
   ASSERT_EQ(lightAttr->getType(), "spot");
   ASSERT_EQ(lightAttr->getInnerConeAngle(), -0.75);
   ASSERT_EQ(lightAttr->getOuterConeAngle(), -1.57);
+}  // AttributesManagers_LightJSONLoadTest
+
+/**
+ * @brief This test will verify that the Scene Instance attributes' managers'
+ * JSON loading process is working as expected.
+ */
+TEST_F(AttributesManagersTest, AttributesManagers_SceneInstanceJSONLoadTest) {
+  LOG(INFO)
+      << "Starting "
+         "AttributesManagersTest::AttributesManagers_SceneInstanceJSONLoadTest";
+  // build JSON sample config
+  const std::string& jsonString =
+      R"({
+      "stage_instance":{
+          "template_name": "test_stage_template",
+          "translation": [1,2,3],
+          "rotation": [0.1, 0.2, 0.3, 0.4]
+      },
+      "object_instances": [
+          {
+              "template_name": "test_object_template0",
+              "translation": [0,1,2],
+              "rotation": [0.2, 0.3, 0.4, 0.5],
+              "motion_type": "KINEMATIC"
+          },
+          {
+              "template_name": "test_object_template1",
+              "translation": [0,-1,-2],
+              "rotation": [0.5, 0.6, 0.7, 0.8],
+              "motion_type": "DYNAMIC"
+          }
+      ],
+      "default_lighting":  "test_lighting_configuration",
+      "navmesh_instance": "test_navmesh_path1",
+      "semantic_scene_instance": "test_semantic_descriptor_path1"
+     })";
 
   auto sceneAttr =
       testBuildAttributesFromJSONString<AttrMgrs::SceneAttributesManager,
                                         Attrs::SceneAttributes>(
-          sceneAttributesManager_);
+          sceneAttributesManager_, jsonString);
 
   // verify exists
   ASSERT_NE(nullptr, sceneAttr);
@@ -480,10 +548,40 @@ TEST_F(AttributesManagersTest, AttributesManagers_JSONLoadTest) {
   ASSERT_EQ(objInstance->getMotionType(),
             static_cast<int>(esp::physics::MotionType::DYNAMIC));
 
+}  // AttributesManagers_SceneInstanceJSONLoadTest
+
+/**
+ * @brief This test will verify that the Stage attributes' managers' JSON
+ * loading process is working as expected.
+ */
+TEST_F(AttributesManagersTest, AttributesManagers_StageJSONLoadTest) {
+  LOG(INFO) << "Starting "
+               "AttributesManagersTest::AttributesManagers_StageJSONLoadTest";
+
+  // build JSON sample config
+  const std::string& jsonString =
+      R"({
+        "scale":[2,3,4],
+        "margin": 0.9,
+        "friction coefficient": 0.321,
+        "restitution coefficient": 0.456,
+        "requires lighting": false,
+        "units to meters": 1.1,
+        "up":[2.1,0,0],
+        "front":[0,2.1,0],
+        "render mesh": "testJSONRenderAsset.glb",
+        "collision mesh": "testJSONCollisionAsset.glb",
+        "gravity": [9,8,7],
+        "origin":[1,2,3],
+        "semantic mesh":"testJSONSemanticAsset.glb",
+        "nav mesh":"testJSONNavMeshAsset.glb",
+        "house filename":"testJSONHouseFileName.glb"
+      })";
+
   auto stageAttr =
       testBuildAttributesFromJSONString<AttrMgrs::StageAttributesManager,
                                         Attrs::StageAttributes>(
-          stageAttributesManager_);
+          stageAttributesManager_, jsonString);
   // verify exists
   ASSERT_NE(nullptr, stageAttr);
   // match values set in test JSON
@@ -504,11 +602,38 @@ TEST_F(AttributesManagersTest, AttributesManagers_JSONLoadTest) {
   ASSERT_EQ(stageAttr->getSemanticAssetHandle(), "testJSONSemanticAsset.glb");
   ASSERT_EQ(stageAttr->getNavmeshAssetHandle(), "testJSONNavMeshAsset.glb");
   ASSERT_EQ(stageAttr->getHouseFilename(), "testJSONHouseFileName.glb");
+}  // AttributesManagers_StageJSONLoadTest
 
+/**
+ * @brief This test will verify that the Object attributes' managers' JSON
+ * loading process is working as expected.
+ */
+TEST_F(AttributesManagersTest, AttributesManagers_ObjectJSONLoadTest) {
+  LOG(INFO) << "Starting "
+               "AttributesManagersTest::AttributesManagers_ObjectJSONLoadTest";
+  // build JSON sample config
+  const std::string& jsonString =
+      R"({
+        "scale":[2,3,4],
+        "margin": 0.9,
+        "friction coefficient": 0.321,
+        "restitution coefficient": 0.456,
+        "requires lighting": false,
+        "units to meters": 1.1,
+        "up":[2.1,0,0],
+        "front":[0,2.1,0],
+        "render mesh": "testJSONRenderAsset.glb",
+        "collision mesh": "testJSONCollisionAsset.glb",
+        "mass": 9,
+        "use bounding box for collision": true,
+        "join collision meshes":true,
+        "inertia": [1.1, 0.9, 0.3],
+        "COM": [0.1,0.2,0.3]
+      })";
   auto objAttr =
       testBuildAttributesFromJSONString<AttrMgrs::ObjectAttributesManager,
                                         Attrs::ObjectAttributes>(
-          objectAttributesManager_);
+          objectAttributesManager_, jsonString);
   // verify exists
   ASSERT_NE(nullptr, objAttr);
   // match values set in test JSON
@@ -530,7 +655,7 @@ TEST_F(AttributesManagersTest, AttributesManagers_JSONLoadTest) {
   ASSERT_EQ(objAttr->getInertia(), Magnum::Vector3(1.1, 0.9, 0.3));
   ASSERT_EQ(objAttr->getCOM(), Magnum::Vector3(0.1, 0.2, 0.3));
 
-}  // AttributesManagersTest::AttributesManagers_JSONLoadTest
+}  // AttributesManagersTest::AttributesManagers_ObjectJSONLoadTest
 
 /**
  * @brief This test will test creating, modifying, registering and deleting
@@ -544,8 +669,6 @@ TEST_F(AttributesManagersTest, AttributesManagers_JSONLoadTest) {
  */
 TEST_F(AttributesManagersTest, AttributesManagersCreate) {
   LOG(INFO) << "Starting AttributesManagersTest::AttributesManagersCreate";
-  std::string stageConfigFile = Cr::Utility::Directory::join(
-      dataDir, "test_assets/scenes/simple_room.glb");
 
   LOG(INFO) << "Start Test : Create, Edit, Remove Attributes for "
                "PhysicsAttributesManager @ "
@@ -555,7 +678,10 @@ TEST_F(AttributesManagersTest, AttributesManagersCreate) {
   testCreateAndRemove<AttrMgrs::PhysicsAttributesManager>(
       physicsAttributesManager_, physicsConfigFile);
   testCreateAndRemoveDefault<AttrMgrs::PhysicsAttributesManager>(
-      physicsAttributesManager_, stageConfigFile, false);
+      physicsAttributesManager_, physicsConfigFile, false);
+
+  std::string stageConfigFile = Cr::Utility::Directory::join(
+      dataDir, "test_assets/scenes/simple_room.glb");
 
   LOG(INFO) << "Start Test : Create, Edit, Remove Attributes for "
                "StageAttributesManager @ "
