@@ -440,10 +440,10 @@ class BulletRigidObject : public BulletBase,
   void syncPose() override;
 
   /**
-   * @brief construct a @ref btRigidBody for this object configured for either
-   * kinematics or dynamics.
+   * @brief construct a @ref btRigidBody for this object configured by
+   * MotionType and add it to the world.
    */
-  void constructRigidBody(bool kinematic = false);
+  void constructAndAddRigidBody(MotionType mt);
 
   /**
    * @brief Iterate through all collision objects and active all objects sharing

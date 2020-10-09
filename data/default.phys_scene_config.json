@@ -5,6 +5,6 @@
     "friction coefficient": 0.4,
     "restitution coefficient": 0.1,
     "rigid object paths":[
-        "/Users/alexclegg/Documents/ReplicaCAD/replicaCAD_dataset_v2/objects/configs_convex"
+        "/Users/alexclegg/Documents/ReplicaCAD/replicaCAD_dataset_v3/objects/configs_convex"
     ]
 }

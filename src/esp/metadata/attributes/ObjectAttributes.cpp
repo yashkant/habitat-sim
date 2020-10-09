@@ -54,7 +54,7 @@ AbstractObjectAttributes::AbstractObjectAttributes(
     const std::string& handle)
     : AbstractAttributes(attributesClassKey, handle) {
   setFrictionCoefficient(0.5);
-  setRestitutionCoefficient(0.1);
+  setRestitutionCoefficient(0.0);
   setScale({1.0, 1.0, 1.0});
   setCollisionAssetSize({1.0, 1.0, 1.0});
   setMargin(0.04);

@@ -289,20 +289,23 @@ class Viewer : public Mn::Platform::Application {
           objectAttrManager_->getFileTemplateHandlesBySubstring(objectString);
       Mn::Debug{} << "  \"corresponding handles\": " << templateHandles;
 
+      // auto mass from uniform density (before manual mass in the dataset)
+      /*
       auto preObID = simulator_->addObjectByHandle(templateHandles[0]);
       auto bb = simulator_->getObjectSceneNode(preObID)->getCumulativeBB();
       float volume = bb.sizeX() * bb.sizeY() * bb.sizeZ();
       float mass = fmax(volume * 100, 1.0);
       Mn::Debug{} << " computed mass = " << mass;
       simulator_->removeObject(preObID);
+       */
 
-      auto objTemplate =
-          objectAttrManager_->getObjectByHandle(templateHandles[0]);
+      // auto objTemplate =
+      //    objectAttrManager_->getObjectByHandle(templateHandles[0]);
       // objTemplate->setMargin(0.04);
       // objTemplate->setFrictionCoefficient(0.7);
       // objTemplate->setRestitutionCoefficient(0.0);
-      objTemplate->setMass(mass);
-      objectAttrManager_->registerObject(objTemplate, templateHandles[0]);
+      // objTemplate->setMass(mass);
+      // objectAttrManager_->registerObject(objTemplate, templateHandles[0]);
 
       auto obID = simulator_->addObjectByHandle(templateHandles[0]);
       idToObject[obID] = objectString;
@@ -337,21 +340,36 @@ class Viewer : public Mn::Platform::Application {
 
   std::map<int, int> objectJsonIndexToID_;
 
+  std::vector<std::string> staticFurnitureObjects = {
+      "frl_apartment_cabinet",
+      "frl_apartment_refrigerator",
+      "frl_apartment_sofa",
+      "frl_apartment_table_01",
+      "frl_apartment_table_02",
+      "frl_apartment_table_03",
+      "frl_apartment_tvstand",
+      "frl_apartment_wall_cabinet_01",
+      "frl_apartment_wall_cabinet_02",
+      "frl_apartment_wall_cabinet_03"};
+
   /**
    * @brief re-save the scene_instance json last loaded with new object states
    * (e.g. after simulation settling)
    * @param jsonIndexToObjectID a map of json index to object ids for
    * correspondance between json doc and scene state.
+   * @param staticObjectNames a list of names which should be marked MotionType
+   * STATIC on export.
    */
   void saveAdjustedObjectInstances(
       std::string filepath,
-      const std::map<int, int>& jsonIndexToObjectID) {
+      esp::io::JsonDocument& document,
+      const std::map<int, int>& jsonIndexToObjectID,
+      std::vector<std::string> staticObjectNames = {}) {
     Mn::Debug{} << "Starting saveAdjustedObjectInstances to " << filepath;
 
     // start with the original json doc
-    auto& objects = objectJsonConfig_["object instances"];
-    esp::io::JsonDocument::AllocatorType& allocator =
-        objectJsonConfig_.GetAllocator();
+    auto& objects = document["object instances"];
+    esp::io::JsonDocument::AllocatorType& allocator = document.GetAllocator();
     for (rapidjson::SizeType i = 0; i < objects.Size(); i++) {
       auto state = simulator_->getRigidState(jsonIndexToObjectID.at(i));
 
@@ -368,8 +386,24 @@ class Viewer : public Mn::Platform::Application {
       for (int j = 0; j < 3; ++j) {
         rotation.PushBack(state.rotation.vector()[j], allocator);
       }
+
+      // if given a list of static object names
+
+      for (auto name : staticObjectNames) {
+        std::string objectString =
+            object.FindMember("template_name")->value.GetString();
+        if (objectString.find(name) != std::string::npos) {
+          auto& motiontype = object.FindMember("motiontype")->value;
+          char buffer[10];
+          int len = sprintf(buffer, "STATIC");  // dynamically created string.
+          motiontype.SetString(buffer, len, allocator);
+          memset(buffer, 0, sizeof(buffer));
+          break;
+        }
+      }
     }
-    bool writeSuccess = esp::io::writeJsonToFile(objectJsonConfig_, filepath);
+
+    bool writeSuccess = esp::io::writeJsonToFile(document, filepath);
 
     Mn::Debug{} << "  DONE - Success? " << writeSuccess;
   }
@@ -1220,9 +1254,10 @@ void Viewer::keyPressEvent(KeyEvent& event) {
     case KeyEvent::Key::C:
       showFPS_ = !showFPS_;
       break;
-    case KeyEvent::Key::O:
-      addTemplateObject();
-      break;
+    case KeyEvent::Key::O: {
+      int newID = addTemplateObject();
+      simulator_->setObjectMotionType(esp::physics::MotionType::STATIC, newID);
+    } break;
     case KeyEvent::Key::P:
       pokeLastObject();
       break;
@@ -1238,20 +1273,21 @@ void Viewer::keyPressEvent(KeyEvent& event) {
     case KeyEvent::Key::V:
       invertGravity();
       break;
-    case KeyEvent::Key::T:
-      // Test key. Put what you want here...
-      torqueLastObject();
-      break;
     case KeyEvent::Key::N:
       // toggle navmesh visualization
       simulator_->setNavMeshVisualization(
           !simulator_->isNavMeshVisualizationActive());
       break;
-    case KeyEvent::Key::M:
+    case KeyEvent::Key::M: {
+      // recompute, visualize, and save NavMesh
+      auto navMeshSettings = esp::nav::NavMeshSettings();
+      simulator_->recomputeNavMesh(*simulator_->getPathFinder().get(),
+                                   navMeshSettings, true);
       if (simulator_->getPathFinder()->isLoaded()) {
+        simulator_->setNavMeshVisualization(true);
         simulator_->getPathFinder()->saveNavMesh("navmesh_output.navmesh");
       }
-      break;
+    } break;
     case KeyEvent::Key::I:
       screenshot();
       break;
@@ -1284,8 +1320,35 @@ void Viewer::keyPressEvent(KeyEvent& event) {
       reloadLights(lightingSetupFile_);
       loadObjectInstances(objectInstanceFile_, objectJsonIndexToID_);
     } break;
+    case KeyEvent::Key::T: {
+      // reset the physics scene
+      esp::agent::AgentState::ptr agentState = esp::agent::AgentState::create();
+      simulator_->getAgent(0)->getState(agentState);
+      defaultAgent_->setInitialState(*agentState, false);
+      for (auto objId : simulator_->getExistingObjectIDs()) {
+        simulator_->removeObject(objId);
+      }
+      simulator_->reset();
+      reloadLights(lightingSetupFile_);
+      std::string objectInstancesWithStaticsFile =
+          Cr::Utility::String::replaceFirst(
+              objectInstanceFile_, ".scene_objects_instances.json",
+              "_static_furniture.scene_objects_instances.json");
+      loadObjectInstances(objectInstancesWithStaticsFile, objectJsonIndexToID_);
+    } break;
     case KeyEvent::Key::J: {
-      saveAdjustedObjectInstances(objectInstanceFile_, objectJsonIndexToID_);
+      esp::io::JsonDocument docCopy;
+      esp::io::JsonDocument::AllocatorType& allocator =
+          objectJsonConfig_.GetAllocator();
+      docCopy.CopyFrom(objectJsonConfig_, allocator);
+      saveAdjustedObjectInstances(objectInstanceFile_, docCopy,
+                                  objectJsonIndexToID_);
+      std::string objectInstancesWithStaticsFile =
+          Cr::Utility::String::replaceFirst(
+              objectInstanceFile_, ".scene_objects_instances.json",
+              "_static_furniture.scene_objects_instances.json");
+      saveAdjustedObjectInstances(objectInstancesWithStaticsFile, docCopy,
+                                  objectJsonIndexToID_, staticFurnitureObjects);
     } break;
     default:
       break;
