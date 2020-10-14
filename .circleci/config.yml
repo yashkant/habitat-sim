@@ -341,7 +341,7 @@ jobs:
                 unzip locobot_merged.zip -d data/objects/
                 rm locobot_merged.zip
                 wget http://dl.fbaipublicfiles.com/habitat/locobot_merged_v0.2.zip
-                unzip locobot_merged_v0.2.zip -d data/objects/
+                unzip locobot_merged_v0.2.zip -d -u data/objects/
                 rm locobot_merged_v0.2.zip
                 cd ..
               fi
