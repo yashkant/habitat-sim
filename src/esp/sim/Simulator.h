@@ -119,12 +119,20 @@ class Simulator {
     return metadataMediator_->getPhysicsAttributesManager();
   }
   /**
-   * @brief Return manager for construction and access to scene attributes for
+   * @brief Return manager for construction and access to stage attributes for
    * the current dataset.
    */
   const metadata::managers::StageAttributesManager::ptr
   getStageAttributesManager() const {
     return metadataMediator_->getStageAttributesManager();
+  }
+  /**
+   * @brief Return manager for construction and access to scene attributes for
+   * the current dataset.
+   */
+  const metadata::managers::SceneAttributesManager::ptr
+  getSceneAttributesManager() const {
+    return metadataMediator_->getSceneAttributesManager();
   }
 
   /**
@@ -134,13 +142,16 @@ class Simulator {
     return metadataMediator_->getActiveDatasetName();
   }
 
+  // TODO: should this be re-named? It loads a dataset, so maybe shouldn't be
+  // called "setActiveDataset" or specifically separated into a setter and a
+  // loader?
   /**
    * @brief Set current active dataset name from @ref metadataMediator_.
    * @param _dsHandle The desired dataset to switch to. If has not been loaded,
    * an attempt will be made to load it.
    */
-  void setActiveDatasetName(const std::string& _dsHandle) {
-    metadataMediator_->setActiveDatasetName(_dsHandle);
+  bool setActiveDatasetName(const std::string& _dsHandle) {
+    return metadataMediator_->setActiveDatasetName(_dsHandle);
   }
 
   /** @brief Return the library implementation type for the simulator currently

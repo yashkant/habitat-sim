@@ -187,6 +187,10 @@ Key Commands:
       stageAttrManager_ = nullptr;
   std::shared_ptr<esp::metadata::managers::PhysicsAttributesManager>
       physAttrManager_ = nullptr;
+  std::shared_ptr<esp::metadata::managers::SceneAttributesManager>
+      sceneAttrManager_ = nullptr;
+
+  void loadSceneInstance(std::string sceneInstanceHandle);
 
   bool debugBullet_ = false;
 
@@ -247,6 +251,9 @@ Viewer::Viewer(const Arguments& arguments)
       .addBooleanOption("recompute-navmesh")
       .setHelp("recompute-navmesh",
                "Programmatically re-generate the scene navmesh.")
+      .addOption("dataset-file")
+      .setHelp("dataset-file", "Load a dataset into the MM as primary.")
+
       .parse(arguments.argc, arguments.argv);
 
   const auto viewportSize = Mn::GL::defaultFramebuffer.viewport().size();
@@ -296,12 +303,27 @@ Viewer::Viewer(const Arguments& arguments)
 
   simulator_ = esp::sim::Simulator::create_unique(simConfig);
 
+  // load a dataset and set to active before continuing
+  bool loadingFromDatasetConfig = false;
+  if (!args.value("dataset-file").empty()) {
+    Mn::Debug{} << "~~~~~~~~~~~~~~~ before dataset load ~~~~~~~~~~~~~~~";
+    std::string datasetFile = Cr::Utility::Directory::join(
+        Corrade::Utility::Directory::current(), args.value("dataset-file"));
+    if (Cr::Utility::Directory::exists(datasetFile)) {
+      // if successfully loaded, we'll do some specific setup next.
+      loadingFromDatasetConfig = simulator_->setActiveDatasetName(datasetFile);
+    }
+  }
+
   objectAttrManager_ = simulator_->getObjectAttributesManager();
-  objectAttrManager_->loadAllConfigsFromPath(Cr::Utility::Directory::join(
-      Corrade::Utility::Directory::current(), "./data/objects"));
   assetAttrManager_ = simulator_->getAssetAttributesManager();
   stageAttrManager_ = simulator_->getStageAttributesManager();
   physAttrManager_ = simulator_->getPhysicsAttributesManager();
+  sceneAttrManager_ = simulator_->getSceneAttributesManager();
+
+  // manual prototype of scene instance loading from a dataset.
+  if (loadingFromDatasetConfig) {
+  }
 
   // NavMesh customization options
   if (args.isSet("disable-navmesh")) {
@@ -834,6 +856,11 @@ void Viewer::screenshot() {
   Mn::DebugTools::screenshot(
       Mn::GL::defaultFramebuffer,
       screenshot_directory + std::to_string(savedFrames++) + ".png");
+}
+
+// clear the scene and then attempt to manually load a scene instance
+void loadSceneInstance(std::string sceneInstanceHandle) {
+  auto matchingSceneHandles = sceneAttrManager_->
 }
 
 }  // namespace
