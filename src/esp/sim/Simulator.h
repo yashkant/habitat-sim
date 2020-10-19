@@ -119,7 +119,7 @@ class Simulator {
     return metadataMediator_->getPhysicsAttributesManager();
   }
   /**
-   * @brief Return manager for construction and access to stage attributes for
+   * @brief Return manager for construction and access to scene attributes for
    * the current dataset.
    */
   const metadata::managers::StageAttributesManager::ptr
