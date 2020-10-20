@@ -724,6 +724,13 @@ class Simulator {
     metadataMediator_ = _metadataMediator;
   }
 
+  /**
+   * @brief Get this simulator's MetadataMediator
+   */
+  metadata::MetadataMediator::ptr getMetadataMediator() {
+    return metadataMediator_;
+  }
+
  protected:
   Simulator(){};
 

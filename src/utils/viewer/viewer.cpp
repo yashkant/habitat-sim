@@ -178,7 +178,11 @@ Key Commands:
   // The simulator object backend for this viewer instance
   std::unique_ptr<esp::sim::Simulator> simulator_;
 
+  // copy of the SimulatorConfiguration for easy reconfiguring.
   esp::sim::SimulatorConfiguration simConfig_;
+
+  // optional physics stepping
+  bool simulating_ = false;
 
   // The managers belonging to the simulator
   std::shared_ptr<esp::metadata::managers::ObjectAttributesManager>
@@ -192,8 +196,18 @@ Key Commands:
   std::shared_ptr<esp::metadata::managers::SceneAttributesManager>
       sceneAttrManager_ = nullptr;
 
+  //! load a particular scene instance by handle
   void loadSceneInstance(std::string sceneInstanceHandle);
 
+  //! used to dynamically swap instances
+  int activeSceneInstanceIx_ = 0;
+
+  //! increment or decrement and clamp activeSceneInstanceIx_ and load the
+  //! corresponding scene instance
+  void nextSceneInstance(bool previous = false);
+
+  //! load a particular light setup by handle and register as the default
+  //! LightSetup
   void instanceLightSetup(std::string lightSetupHandle);
 
   bool debugBullet_ = false;
@@ -330,7 +344,8 @@ Viewer::Viewer(const Arguments& arguments)
 
   // manual prototype of scene instance loading from a dataset.
   if (loadingFromDatasetConfig) {
-    loadSceneInstance("apt_0");
+    // Knowing I am demoing ReplicaCAD, I'll start with empty stage
+    loadSceneInstance("empty");
   }
 
   // NavMesh customization options
@@ -529,7 +544,7 @@ void Viewer::drawEvent() {
 
   // step physics at a fixed rate
   timeSinceLastSimulation += timeline_.previousFrameDuration();
-  if (timeSinceLastSimulation >= 1.0 / 60.0) {
+  if (timeSinceLastSimulation >= 1.0 / 60.0 && simulating_) {
     simulator_->stepWorld(1.0 / 60.0);
     timeSinceLastSimulation = 0.0;
   }
@@ -756,6 +771,10 @@ void Viewer::keyPressEvent(KeyEvent& event) {
     case KeyEvent::Key::Esc:
       std::exit(0);
       break;
+    case KeyEvent::Key::Space:
+      simulating_ = !simulating_;
+      Mn::Debug{} << " simulating_ = " << simulating_;
+      break;
     case KeyEvent::Key::Left:
       defaultAgent_->act("turnLeft");
       break;
@@ -847,6 +866,12 @@ void Viewer::keyPressEvent(KeyEvent& event) {
     case KeyEvent::Key::H:
       printHelpText();
       break;
+    case KeyEvent::Key::LeftBracket: {
+      nextSceneInstance(true);  // previous
+    } break;
+    case KeyEvent::Key::RightBracket: {
+      nextSceneInstance();  // next
+    } break;
     default:
       break;
   }
@@ -866,31 +891,48 @@ void Viewer::screenshot() {
       screenshot_directory + std::to_string(savedFrames++) + ".png");
 }
 
+void Viewer::nextSceneInstance(bool previous) {
+  auto agentState = esp::agent::AgentState::create();
+  simulator_->getAgent(0)->getState(agentState);
+  activeSceneInstanceIx_ =
+      std::min(sceneAttrManager_->getNumObjects() - 1,
+               std::max(activeSceneInstanceIx_ + (previous ? -1 : 1), 0));
+  if (activeSceneInstanceIx_ >= 0) {
+    loadSceneInstance(
+        sceneAttrManager_
+            ->getObjectHandlesBySubstring()[activeSceneInstanceIx_]);
+  }
+  simulator_->getAgent(0)->setState(*agentState.get());
+  Mn::Debug{} << "Loaded instance " << activeSceneInstanceIx_ << " : "
+              << sceneAttrManager_
+                     ->getObjectHandlesBySubstring()[activeSceneInstanceIx_];
+}
+
 // clear the scene and then attempt to manually load a scene instance
 void Viewer::loadSceneInstance(std::string sceneInstanceHandle) {
+  Mn::Debug{} << "Viewer::loadSceneInstance(" << sceneInstanceHandle << "):";
   Mn::Debug{} << "Active dataset name = " << simulator_->getActiveDatasetName();
-  Mn::Debug{} << "Stage templates: "
-              << stageAttrManager_->getObjectHandlesBySubstring();
-  Mn::Debug{} << "Object templates: "
-              << objectAttrManager_->getObjectHandlesBySubstring();
-
   auto matchingSceneHandles =
       sceneAttrManager_->getObjectHandlesBySubstring(sceneInstanceHandle);
-
-  Mn::Debug{} << "Viewer::loadSceneInstance(" << sceneInstanceHandle << "):";
   Mn::Debug{} << "  - matching scene handles: " << matchingSceneHandles;
 
   auto sceneTemplate =
       sceneAttrManager_->getObjectByHandle(matchingSceneHandles[0]);
 
-  Mn::Debug{} << "got sceneTemplate";
-
-  Mn::Debug{} << "got stage instance: " << sceneTemplate->getStageInstance();
+  Mn::Debug{} << "  - got stage instance: "
+              << sceneTemplate->getStageInstance();
 
   // 1. reconfigure with new stage
   // note: opportunity for ambiguity
   simConfig_.scene.id = stageAttrManager_->getObjectHandlesBySubstring(
       sceneTemplate->getStageInstance()->getHandle())[0];
+  if (stageAttrManager_->getObjectByHandle(simConfig_.scene.id)
+          ->getRequiresLighting()) {
+    simConfig_.sceneLightSetup =
+        esp::assets::ResourceManager::DEFAULT_LIGHTING_KEY;
+  } else {
+    simConfig_.sceneLightSetup = esp::assets::ResourceManager::NO_LIGHT_KEY;
+  }
   // TODO: lighting
   Mn::Debug{} << "  - stage handle: " << simConfig_.scene.id;
 
@@ -900,25 +942,89 @@ void Viewer::loadSceneInstance(std::string sceneInstanceHandle) {
     simulator_->removeObject(id);
   }
 
-  // 2. load new objects
+  // 2. load new NavMesh
+  Mn::Debug{} << "Load navmesh: " << sceneTemplate->getNavmeshHandle();
+  simulator_->getPathFinder().reset();
+  if (!sceneTemplate->getNavmeshHandle().empty()) {
+    if (simulator_->getMetadataMediator()->getActiveNavmeshMap().count(
+            sceneTemplate->getNavmeshHandle()) > 0) {
+      auto navmeshSource =
+          simulator_->getMetadataMediator()->getActiveNavmeshMap().at(
+              sceneTemplate->getNavmeshHandle());
+      auto navmeshFullSource = Cr::Utility::Directory::join(
+          Cr::Utility::Directory::path(simConfig_.datasetConfigFile),
+          navmeshSource);
+
+      Mn::Debug{} << " attemping to load " << navmeshSource;
+      Mn::Debug{} << "    abs path: " << navmeshFullSource;
+      bool success =
+          simulator_->getPathFinder()->loadNavMesh(navmeshFullSource);
+      Mn::Debug{} << " ... success : " << success;
+    } else {
+      Mn::Debug{} << " ... configured handle is not valid, aborting.";
+    }
+  }
+  // TODO: this should be more graceful
+  if (simulator_->isNavMeshVisualizationActive()) {
+    simulator_->setNavMeshVisualization(false);
+    simulator_->setNavMeshVisualization(true);
+  }
+
+  // 3. load the LightSetup
+  if (!sceneTemplate->getLightingHandle().empty()) {
+    instanceLightSetup(sceneTemplate->getLightingHandle());
+  }
+
+  // 4. load new objects
   for (auto objectInstance : sceneTemplate->getObjectInstances()) {
-    // note: opportunity for ambiguity
-    Mn::Debug{} << "======================";
+    // note: opportunity for ambiguity due to substring search
     auto objectHandle = objectAttrManager_->getObjectHandlesBySubstring(
         objectInstance->getHandle())[0];
-    Mn::Debug{} << " - Looking for object " << objectInstance->getHandle()
-                << "found object handle : " << objectHandle;
     auto id = simulator_->addObjectByHandle(objectHandle);
     simulator_->setTranslation(objectInstance->getTranslation(), id);
     simulator_->setRotation(objectInstance->getRotation(), id);
-    Mn::Debug{} << " - MotionType = " << objectInstance->getMotionType();
     simulator_->setObjectMotionType(
         esp::physics::MotionType(objectInstance->getMotionType()), id);
+    Mn::Debug{} << "======================";
+    Mn::Debug{} << " - Looking for object " << objectInstance->getHandle()
+                << "    ... found object handle : " << objectHandle;
+    Mn::Debug{} << " - MotionType = " << objectInstance->getMotionType();
   }
 }
 
 void Viewer::instanceLightSetup(std::string lightSetupHandle) {
-  // TODO:
+  Mn::Debug{} << "Viewer::instanceLightSetup(" << lightSetupHandle << ")";
+  auto lightMgr =
+      simulator_->getMetadataMediator()->getLightLayoutAttributesManager();
+  auto matchingHandles =
+      lightMgr->getObjectHandlesBySubstring(lightSetupHandle);
+  if (!matchingHandles.empty()) {
+    Mn::Debug{} << "  ... handle(s) found: " << matchingHandles;
+    Mn::Debug{} << "  ... creating LightSetup from " << matchingHandles[0];
+    auto lightLayoutAttr = lightMgr->getObjectByHandle(matchingHandles[0]);
+    esp::gfx::LightSetup lightSetup;
+
+    for (auto lightInstanceInfo : lightLayoutAttr->getLightInstances()) {
+      esp::gfx::LightInfo lightInfo;
+      lightInfo.color = lightInstanceInfo.second->getColor() *
+                        lightInstanceInfo.second->getIntensity();
+      if (lightInstanceInfo.second->getType() == "point") {
+        lightInfo.vector = {lightInstanceInfo.second->getPosition(), 1};
+      } else if (lightInstanceInfo.second->getType() == "directional") {
+        lightInfo.vector = {lightInstanceInfo.second->getDirection(), 0};
+      } else {
+        Mn::Debug{} << " light with type "
+                    << lightInstanceInfo.second->getType()
+                    << " not supported. Skipping.";
+        continue;
+      }
+      lightSetup.push_back(lightInfo);
+    }
+    // override the default light setup for simplicity
+    simulator_->setLightSetup(lightSetup);
+  } else {
+    Mn::Debug{} << "  ... handle not found, aborting.";
+  }
 }
 
 }  // namespace
