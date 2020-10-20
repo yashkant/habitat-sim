@@ -178,6 +178,8 @@ Key Commands:
   // The simulator object backend for this viewer instance
   std::unique_ptr<esp::sim::Simulator> simulator_;
 
+  esp::sim::SimulatorConfiguration simConfig_;
+
   // The managers belonging to the simulator
   std::shared_ptr<esp::metadata::managers::ObjectAttributesManager>
       objectAttrManager_ = nullptr;
@@ -282,14 +284,14 @@ Viewer::Viewer(const Arguments& arguments)
   }
 
   // configure and intialize Simulator
-  auto simConfig = esp::sim::SimulatorConfiguration();
-  simConfig.scene.id = sceneFileName;
-  simConfig.enablePhysics = useBullet;
-  simConfig.frustumCulling = true;
-  simConfig.requiresTextures = true;
+  simConfig_ = esp::sim::SimulatorConfiguration();
+  simConfig_.scene.id = sceneFileName;
+  simConfig_.enablePhysics = useBullet;
+  simConfig_.frustumCulling = true;
+  simConfig_.requiresTextures = true;
   if (args.isSet("stage-requires-lighting")) {
     Mn::Debug{} << "Stage using DEFAULT_LIGHTING_KEY";
-    simConfig.sceneLightSetup =
+    simConfig_.sceneLightSetup =
         esp::assets::ResourceManager::DEFAULT_LIGHTING_KEY;
   }
 
@@ -298,10 +300,10 @@ Viewer::Viewer(const Arguments& arguments)
       Corrade::Utility::Directory::current(), args.value("physics-config"));
   if (Cr::Utility::Directory::exists(physicsConfig)) {
     Mn::Debug{} << "Using PhysicsManager config: " << physicsConfig;
-    simConfig.physicsConfigFile = physicsConfig;
+    simConfig_.physicsConfigFile = physicsConfig;
   }
 
-  simulator_ = esp::sim::Simulator::create_unique(simConfig);
+  simulator_ = esp::sim::Simulator::create_unique(simConfig_);
 
   // load a dataset and set to active before continuing
   bool loadingFromDatasetConfig = false;
@@ -325,6 +327,7 @@ Viewer::Viewer(const Arguments& arguments)
 
   // manual prototype of scene instance loading from a dataset.
   if (loadingFromDatasetConfig) {
+    loadSceneInstance("apt_0");
   }
 
   // NavMesh customization options
@@ -861,8 +864,32 @@ void Viewer::screenshot() {
 }
 
 // clear the scene and then attempt to manually load a scene instance
-void loadSceneInstance(std::string sceneInstanceHandle) {
-  auto matchingSceneHandles = sceneAttrManager_->
+void Viewer::loadSceneInstance(std::string sceneInstanceHandle) {
+  auto matchingSceneHandles =
+      sceneAttrManager_->getObjectHandlesBySubstring(sceneInstanceHandle);
+
+  Mn::Debug{} << "Viewer::loadSceneInstance(" << sceneInstanceHandle << "):";
+  Mn::Debug{} << "  - matching scene handles: " << matchingSceneHandles;
+
+  auto sceneTemplate =
+      sceneAttrManager_->getObjectByHandle(matchingSceneHandles[0]);
+
+  Mn::Debug{} << "got sceneTemplate";
+
+  Mn::Debug{} << "got stage instance: " << sceneTemplate->getStageInstance();
+
+  // 1. reconfigure with new stage
+  simConfig_.scene.id = sceneTemplate->getStageInstance()->getHandle();
+  Mn::Debug{} << "  - stage handle: " << simConfig_.scene.id;
+
+  simulator_->reconfigure(simConfig_);
+  // remove any objects leftover (when stage did not change)
+  for (auto id : simulator_->getExistingObjectIDs()) {
+    simulator_->removeObject(id);
+  }
+
+  // 2. load new objects
+  // for(auto)
 }
 
 }  // namespace
