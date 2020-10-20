@@ -194,6 +194,8 @@ Key Commands:
 
   void loadSceneInstance(std::string sceneInstanceHandle);
 
+  void instanceLightSetup(std::string lightSetupHandle);
+
   bool debugBullet_ = false;
 
   esp::scene::SceneNode* agentBodyNode_ = nullptr;
@@ -303,8 +305,6 @@ Viewer::Viewer(const Arguments& arguments)
     simConfig_.physicsConfigFile = physicsConfig;
   }
 
-  simulator_ = esp::sim::Simulator::create_unique(simConfig_);
-
   // load a dataset and set to active before continuing
   bool loadingFromDatasetConfig = false;
   if (!args.value("dataset-file").empty()) {
@@ -312,14 +312,17 @@ Viewer::Viewer(const Arguments& arguments)
     std::string datasetFile = Cr::Utility::Directory::join(
         Corrade::Utility::Directory::current(), args.value("dataset-file"));
     if (Cr::Utility::Directory::exists(datasetFile)) {
+      simConfig_.datasetConfigFile = datasetFile;
+      loadingFromDatasetConfig = true;
       // if successfully loaded, we'll do some specific setup next.
-      loadingFromDatasetConfig = simulator_->setActiveDatasetName(datasetFile);
+      // loadingFromDatasetConfig =
+      // simulator_->setActiveDatasetName(datasetFile);
     }
   }
 
+  simulator_ = esp::sim::Simulator::create_unique(simConfig_);
+
   objectAttrManager_ = simulator_->getObjectAttributesManager();
-  objectAttrManager_->loadAllConfigsFromPath(Cr::Utility::Directory::join(
-      Corrade::Utility::Directory::current(), "./data/objects"));
   assetAttrManager_ = simulator_->getAssetAttributesManager();
   stageAttrManager_ = simulator_->getStageAttributesManager();
   physAttrManager_ = simulator_->getPhysicsAttributesManager();
@@ -865,6 +868,12 @@ void Viewer::screenshot() {
 
 // clear the scene and then attempt to manually load a scene instance
 void Viewer::loadSceneInstance(std::string sceneInstanceHandle) {
+  Mn::Debug{} << "Active dataset name = " << simulator_->getActiveDatasetName();
+  Mn::Debug{} << "Stage templates: "
+              << stageAttrManager_->getObjectHandlesBySubstring();
+  Mn::Debug{} << "Object templates: "
+              << objectAttrManager_->getObjectHandlesBySubstring();
+
   auto matchingSceneHandles =
       sceneAttrManager_->getObjectHandlesBySubstring(sceneInstanceHandle);
 
@@ -879,7 +888,10 @@ void Viewer::loadSceneInstance(std::string sceneInstanceHandle) {
   Mn::Debug{} << "got stage instance: " << sceneTemplate->getStageInstance();
 
   // 1. reconfigure with new stage
-  simConfig_.scene.id = sceneTemplate->getStageInstance()->getHandle();
+  // note: opportunity for ambiguity
+  simConfig_.scene.id = stageAttrManager_->getObjectHandlesBySubstring(
+      sceneTemplate->getStageInstance()->getHandle())[0];
+  // TODO: lighting
   Mn::Debug{} << "  - stage handle: " << simConfig_.scene.id;
 
   simulator_->reconfigure(simConfig_);
@@ -889,7 +901,24 @@ void Viewer::loadSceneInstance(std::string sceneInstanceHandle) {
   }
 
   // 2. load new objects
-  // for(auto)
+  for (auto objectInstance : sceneTemplate->getObjectInstances()) {
+    // note: opportunity for ambiguity
+    Mn::Debug{} << "======================";
+    auto objectHandle = objectAttrManager_->getObjectHandlesBySubstring(
+        objectInstance->getHandle())[0];
+    Mn::Debug{} << " - Looking for object " << objectInstance->getHandle()
+                << "found object handle : " << objectHandle;
+    auto id = simulator_->addObjectByHandle(objectHandle);
+    simulator_->setTranslation(objectInstance->getTranslation(), id);
+    simulator_->setRotation(objectInstance->getRotation(), id);
+    Mn::Debug{} << " - MotionType = " << objectInstance->getMotionType();
+    simulator_->setObjectMotionType(
+        esp::physics::MotionType(objectInstance->getMotionType()), id);
+  }
+}
+
+void Viewer::instanceLightSetup(std::string lightSetupHandle) {
+  // TODO:
 }
 
 }  // namespace
