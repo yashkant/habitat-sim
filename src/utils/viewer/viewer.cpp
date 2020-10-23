@@ -451,6 +451,16 @@ Viewer::Viewer(const Arguments& arguments)
 
   // manual prototype of scene instance loading from a dataset.
   if (loadingFromDatasetConfig) {
+    Mn::Debug{} << "Tried loading a dataset from: "
+                << simConfig_.datasetConfigFile;
+    Mn::Debug{} << " - Current dataset: " << simulator_->getActiveDatasetName();
+    Mn::Debug{} << "    - Current stages available: "
+                << stageAttrManager_->getObjectHandlesBySubstring();
+    Mn::Debug{} << "    - Current objects available: "
+                << objectAttrManager_->getObjectHandlesBySubstring();
+    Mn::Debug{} << "    - Current scenes available: "
+                << sceneAttrManager_->getObjectHandlesBySubstring();
+
     // Knowing I am demoing ReplicaCAD, I'll start with empty stage
     loadSceneInstance("empty");
   }
@@ -1186,7 +1196,10 @@ void Viewer::loadSceneInstance(std::string sceneInstanceHandle) {
     auto objectHandle = objectAttrManager_->getObjectHandlesBySubstring(
         objectInstance->getHandle())[0];
     auto id = simulator_->addObjectByHandle(objectHandle);
-    simulator_->setTranslation(objectInstance->getTranslation(), id);
+    auto objCOMShift =
+        simulator_->getObjectVisualSceneNodes(id)[0]->translation();
+    simulator_->setTranslation(objectInstance->getTranslation() - objCOMShift,
+                               id);
     simulator_->setRotation(objectInstance->getRotation(), id);
     simulator_->setObjectMotionType(
         esp::physics::MotionType(objectInstance->getMotionType()), id);
