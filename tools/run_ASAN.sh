@@ -1,0 +1,2 @@
+#!/bin/bash
+CXXFLAGS="-fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls" CFLAGS="-fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls  " ASAN_OPTIONS="fast_unwind_on_malloc=0:suppressions=$(pwd)/asan_suppressions.txt" LSAN_OPTIONS="suppressions=$(pwd)/lsan_suppressions.txt"  CORRADE_TEST_COLOR=ON GTEST_COLOR=yes ./build.sh --headless --with-cuda --run-tests --debug --bullet
