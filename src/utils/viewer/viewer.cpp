@@ -501,8 +501,10 @@ Viewer::Viewer(const Arguments& arguments)
     Mn::Debug{} << "    - Current scenes available: "
                 << sceneAttrManager_->getObjectHandlesBySubstring();
 
-    // Knowing I am demoing ReplicaCAD, I'll start with empty stage
-    loadSceneInstance("empty");
+    // Load the first scene in the list.
+    if (!sceneAttrManager_->getObjectHandlesBySubstring().empty()) {
+      loadSceneInstance(sceneAttrManager_->getObjectHandlesBySubstring()[0]);
+    }
   }
 
   // NavMesh customization options
