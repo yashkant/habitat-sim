@@ -548,6 +548,7 @@ jobs:
       - run: *download_test_data
       - run:
           name: run CORRADE ASAN
+          no_output_timeout: 25m
           command: |
             export PATH=$HOME/miniconda/bin:/usr/local/cuda/bin:$PATH
             . activate habitat; cd habitat-sim
