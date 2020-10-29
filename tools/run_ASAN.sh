@@ -7,5 +7,5 @@ export ASAN_OPTIONS="fast_unwind_on_malloc=0:suppressions=${GIT_ROOT_DIR}/tools/
 export LSAN_OPTIONS="suppressions=${GIT_ROOT_DIR}/tools/lsan_suppressions.txt"
 export CORRADE_TEST_COLOR=ON
 export GTEST_COLOR=yes
-"${GIT_ROOT_DIR}/build.sh" --headless --with-cuda --bullet --run-tests --debug --cmake --cmake-args="-Dgtest_disable_pthreads=ON"
+"${GIT_ROOT_DIR}/build.sh" --headless --with-cuda --bullet --run-tests --cmake --cmake-args="-Dgtest_disable_pthreads=ON"
 #TODO Add Python Tests for ASAN
