@@ -3,6 +3,9 @@
 // LICENSE file in the root directory of this source tree.
 
 #include "LightLayoutAttributes.h"
+using Magnum::Math::Literals::operator""_radf;
+using Magnum::Math::Literals::operator""_degf;
+
 namespace esp {
 namespace metadata {
 namespace attributes {
@@ -15,8 +18,8 @@ LightInstanceAttributes::LightInstanceAttributes(const std::string& handle)
   setIntensity(1.0);
   setType("point");
   // ignored for all but spot lights
-  setInnerConeAngle(0.75);
-  setOuterConeAngle(1.5);
+  setInnerConeAngle(0.0_radf);
+  setOuterConeAngle(90.0_degf);
 }  // ctor
 
 LightLayoutAttributes::LightLayoutAttributes(const std::string& handle)

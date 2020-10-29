@@ -192,17 +192,44 @@ class Viewer : public Mn::Platform::Application {
 
   void keyPressEvent(KeyEvent& event) override;
 
-  // Interactive functions
+  /**
+   * @brief Instance an object from an ObjectAttributes.
+   * @param configHandle The handle referencing the object's template in the
+   * ObjectAttributesManager.
+   * @return The newly allocated object's ID for referencing it through the
+   * Simulator API.
+   */
   int addObject(const std::string& configHandle);
+
+  /**
+   * @brief Instance an object from an ObjectAttributes.
+   * @param objID The unique ID referencing the object's template in the
+   * ObjectAttributesManager.
+   * @return The newly allocated object's ID for referencing it through the
+   * Simulator API.
+   */
   int addObject(int objID);
 
-  // add template-derived object
+  /**
+   * @brief Instance a random object based on an imported asset if one exists.
+   * @return The newly allocated object's ID for referencing it through the
+   * Simulator API.
+   */
   int addTemplateObject();
 
-  // add primiitive object
+  /**
+   * @brief Instance a random object based on a primitive shape.
+   * @return The newly allocated object's ID for referencing it through the
+   * Simulator API.
+   */
   int addPrimitiveObject();
 
-  int throwSphere(Magnum::Vector3 direction);
+  /**
+   * @brief Throw a sphere from the camera origin in a direction.
+   * @return The newly allocated object's ID for referencing it through the
+   * Simulator API.
+   */
+  int throwSphere(Mn::Vector3 direction);
 
   void pokeLastObject();
   void pushLastObject();
@@ -248,6 +275,8 @@ Key Commands:
   'i' Save a screenshot to "./screenshots/year_month_day_hour-minute-second/#.png"
 
   Object Interactions:
+  SPACE: Toggle physics simulation on/off
+  '.': Take a single simulation step if not simulating continuously.
   '8': Instance a random primitive object in front of the agent.
   'o': Instance a random file-based object in front of the agent.
   'u': Remove most recently instanced object.
@@ -285,11 +314,15 @@ Key Commands:
   // The simulator object backend for this viewer instance
   std::unique_ptr<esp::sim::Simulator> simulator_;
 
-  // copy of the SimulatorConfiguration for easy reconfiguring.
+  // cached configuration used to reconfigure Simulator for easy recycling
   esp::sim::SimulatorConfiguration simConfig_;
 
-  // optional physics stepping
-  bool simulating_ = false;
+  // Toggle physics simulation on/off
+  bool simulating_ = true;
+
+  // Toggle a single simulation step at the next opportunity if not simulating
+  // continuously.
+  bool simulateSingleStep_ = false;
 
   // The managers belonging to the simulator
   std::shared_ptr<esp::metadata::managers::ObjectAttributesManager>
@@ -368,6 +401,10 @@ Viewer::Viewer(const Arguments& arguments)
       .addOption("physics-config", ESP_DEFAULT_PHYSICS_CONFIG_REL_PATH)
       .setHelp("physics-config",
                "Provide a non-default PhysicsManager config file.")
+      .addOption("object-dir", "./data/objects")
+      .setHelp("object-dir",
+               "Provide a directory to search for object config files "
+               "(relative to habitat-sim directory).")
       .addBooleanOption("disable-navmesh")
       .setHelp("disable-navmesh",
                "Disable the navmesh, disabling agent navigation constraints.")
@@ -433,7 +470,7 @@ Viewer::Viewer(const Arguments& arguments)
     std::string datasetFile = Cr::Utility::Directory::join(
         Corrade::Utility::Directory::current(), args.value("dataset-file"));
     if (Cr::Utility::Directory::exists(datasetFile)) {
-      simConfig_.datasetConfigFile = datasetFile;
+      simConfig_.sceneDatasetConfigFile = datasetFile;
       loadingFromDatasetConfig = true;
       // if successfully loaded, we'll do some specific setup next.
       // loadingFromDatasetConfig =
@@ -444,6 +481,8 @@ Viewer::Viewer(const Arguments& arguments)
   simulator_ = esp::sim::Simulator::create_unique(simConfig_);
 
   objectAttrManager_ = simulator_->getObjectAttributesManager();
+  objectAttrManager_->loadAllConfigsFromPath(Cr::Utility::Directory::join(
+      Corrade::Utility::Directory::current(), args.value("object-dir")));
   assetAttrManager_ = simulator_->getAssetAttributesManager();
   stageAttrManager_ = simulator_->getStageAttributesManager();
   physAttrManager_ = simulator_->getPhysicsAttributesManager();
@@ -452,8 +491,9 @@ Viewer::Viewer(const Arguments& arguments)
   // manual prototype of scene instance loading from a dataset.
   if (loadingFromDatasetConfig) {
     Mn::Debug{} << "Tried loading a dataset from: "
-                << simConfig_.datasetConfigFile;
-    Mn::Debug{} << " - Current dataset: " << simulator_->getActiveDatasetName();
+                << simConfig_.sceneDatasetConfigFile;
+    Mn::Debug{} << " - Current dataset: "
+                << simulator_->getActiveSceneDatasetName();
     Mn::Debug{} << "    - Current stages available: "
                 << stageAttrManager_->getObjectHandlesBySubstring();
     Mn::Debug{} << "    - Current objects available: "
@@ -543,17 +583,18 @@ Viewer::Viewer(const Arguments& arguments)
 int Viewer::addObject(int ID) {
   const std::string& configHandle =
       simulator_->getObjectAttributesManager()->getObjectHandleByID(ID);
-  addObject(configHandle);
+  return addObject(configHandle);
 }  // addObject
 
-int Viewer::addObject(const std::string& configFile) {
+int Viewer::addObject(const std::string& objectAttrHandle) {
   // Relative to agent bodynode
   Mn::Matrix4 T = agentBodyNode_->MagnumObject::transformationMatrix();
   Mn::Vector3 new_pos = T.transformPoint({0.1f, 1.5f, -2.0f});
 
-  int physObjectID = simulator_->addObjectByHandle(configFile);
+  int physObjectID = simulator_->addObjectByHandle(objectAttrHandle);
   simulator_->setTranslation(new_pos, physObjectID);
-  simulator_->setRotation(esp::core::randomRotation(), physObjectID);
+  simulator_->setRotation(Mn::Quaternion::fromMatrix(T.rotationNormalized()),
+                          physObjectID);
   return physObjectID;
 }  // addObject
 
@@ -562,9 +603,10 @@ int Viewer::addTemplateObject() {
   int numObjTemplates = objectAttrManager_->getNumFileTemplateObjects();
   if (numObjTemplates > 0) {
     return addObject(objectAttrManager_->getRandomFileTemplateHandle());
-  } else
+  } else {
     LOG(WARNING) << "No objects loaded, can't add any";
-
+    return esp::ID_UNDEFINED;
+  }
 }  // addTemplateObject
 
 // add synthesized primiitive object from keypress
@@ -574,9 +616,10 @@ int Viewer::addPrimitiveObject() {
   int numObjPrims = objectAttrManager_->getNumSynthTemplateObjects();
   if (numObjPrims > 0) {
     return addObject(objectAttrManager_->getRandomSynthTemplateHandle());
-  } else
+  } else {
     LOG(WARNING) << "No primitive templates available, can't add any objects";
-
+    return esp::ID_UNDEFINED;
+  }
 }  // addPrimitiveObject
 
 void Viewer::removeLastObject() {
@@ -686,7 +729,8 @@ void Viewer::drawEvent() {
 
   // step physics at a fixed rate
   timeSinceLastSimulation += timeline_.previousFrameDuration();
-  if (timeSinceLastSimulation >= 1.0 / 60.0 && simulating_) {
+  if (timeSinceLastSimulation >= 1.0 / 60.0 &&
+      (simulating_ || simulateSingleStep_)) {
     if (mouseGrabber_ != nullptr) {
       auto kinMouseGrabber =
           dynamic_cast<MouseObjectKinematicGrabber*>(mouseGrabber_.get());
@@ -696,6 +740,7 @@ void Viewer::drawEvent() {
     }
     simulator_->stepWorld(1.0 / 60.0);
     timeSinceLastSimulation = 0.0;
+    simulateSingleStep_ = false;
   }
 
   // using polygon offset to increase mesh depth to a avoid z-fighting with
@@ -988,7 +1033,11 @@ void Viewer::keyPressEvent(KeyEvent& event) {
       break;
     case KeyEvent::Key::Space:
       simulating_ = !simulating_;
-      Mn::Debug{} << " simulating_ = " << simulating_;
+      Mn::Debug{} << " Physics Simulation: " << simulating_;
+      break;
+    case KeyEvent::Key::Period:
+      // also `>` key
+      simulateSingleStep_ = true;
       break;
     case KeyEvent::Key::Left:
       defaultAgent_->act("turnLeft");
@@ -1126,7 +1175,8 @@ void Viewer::nextSceneInstance(bool previous) {
 // clear the scene and then attempt to manually load a scene instance
 void Viewer::loadSceneInstance(std::string sceneInstanceHandle) {
   Mn::Debug{} << "Viewer::loadSceneInstance(" << sceneInstanceHandle << "):";
-  Mn::Debug{} << "Active dataset name = " << simulator_->getActiveDatasetName();
+  Mn::Debug{} << "Active dataset name = "
+              << simulator_->getActiveSceneDatasetName();
   auto matchingSceneHandles =
       sceneAttrManager_->getObjectHandlesBySubstring(sceneInstanceHandle);
   Mn::Debug{} << "  - matching scene handles: " << matchingSceneHandles;
@@ -1167,7 +1217,7 @@ void Viewer::loadSceneInstance(std::string sceneInstanceHandle) {
           simulator_->getMetadataMediator()->getActiveNavmeshMap().at(
               sceneTemplate->getNavmeshHandle());
       auto navmeshFullSource = Cr::Utility::Directory::join(
-          Cr::Utility::Directory::path(simConfig_.datasetConfigFile),
+          Cr::Utility::Directory::path(simConfig_.sceneDatasetConfigFile),
           navmeshSource);
 
       Mn::Debug{} << " attemping to load " << navmeshSource;

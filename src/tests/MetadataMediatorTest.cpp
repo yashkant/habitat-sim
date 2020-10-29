@@ -34,19 +34,21 @@ using Attrs::UVSpherePrimitiveAttributes;
 const std::string physicsConfigFile =
     Cr::Utility::Directory::join(DATA_DIR,
                                  "test_assets/testing.physics_config.json");
-const std::string datasetConfigFile = Cr::Utility::Directory::join(
+const std::string sceneDatasetConfigFile = Cr::Utility::Directory::join(
     DATA_DIR,
-    "test_assets/dataset_tests/test_dataset.dataset_config.json");
+    "test_assets/dataset_tests/test_dataset.scene_dataset_config.json");
 
 class MetadataMediatorTest : public testing::Test {
  protected:
-  void SetUp() override { MM = MetadataMediator::create(datasetConfigFile); };
+  void SetUp() override {
+    MM = MetadataMediator::create(sceneDatasetConfigFile);
+  };
   void testLoadStages() {
     const auto stageAttributesMgr = MM->getStageAttributesManager();
     int numHandles = stageAttributesMgr->getNumObjects();
-    // should be 3 - one original, one based on original but changed, and one
-    // new
-    ASSERT_EQ(numHandles, 3);
+    // should be 4 - one for default NONE stage, one original, one based on
+    // original but changed, and one new
+    ASSERT_EQ(numHandles, 4);
 
     // get list of matching handles for base - should always only be 1
     auto attrHandles = stageAttributesMgr->getObjectHandlesBySubstring(
@@ -283,9 +285,9 @@ TEST_F(MetadataMediatorTest, MetadataMediatorTest_CreateTestDataset) {
   LOG(INFO) << "Starting "
                "MetadataMediatorTest::MetadataMediatorTest_CreateTestDataset : "
                "Dataset name : "
-            << datasetConfigFile;
+            << sceneDatasetConfigFile;
   // verify dataset name
-  ASSERT_EQ(MM->getActiveDatasetName(), datasetConfigFile);
+  ASSERT_EQ(MM->getActiveSceneDatasetName(), sceneDatasetConfigFile);
 
   LOG(INFO) << "Starting "
                "MetadataMediatorTest::testLoadStages";

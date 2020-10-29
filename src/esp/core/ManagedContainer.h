@@ -446,7 +446,7 @@ class ManagedContainer : public ManagedContainerBase {
    * @param objectHandle handle name to be assigned to the managed object.
    * @param builtFromConfig Managed Object is being constructed from a config
    * file (i.e. @p objectHandle is config file filename).  If false this means
-   * Manage Object is being constructed as some kind of neww/default.
+   * Manage Object is being constructed as some kind of new/default.
    * @return Newly created but unregistered ManagedObject pointer, with only
    * default values set.
    */

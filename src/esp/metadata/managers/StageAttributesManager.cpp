@@ -4,6 +4,8 @@
 
 #include <Corrade/Utility/String.h>
 
+#include <utility>
+
 #include "AbstractObjectAttributesManagerBase.h"
 #include "StageAttributesManager.h"
 
@@ -26,11 +28,21 @@ StageAttributesManager::StageAttributesManager(
     PhysicsAttributesManager::ptr physicsAttributesManager)
     : AbstractObjectAttributesManager<StageAttributes>::
           AbstractObjectAttributesManager("Stage", "stage_config.json"),
-      objectAttributesMgr_(objectAttributesMgr),
-      physicsAttributesManager_(physicsAttributesManager),
+      objectAttributesMgr_(std::move(objectAttributesMgr)),
+      physicsAttributesManager_(std::move(physicsAttributesManager)),
       cfgLightSetup_(assets::ResourceManager::NO_LIGHT_KEY) {
   buildCtorFuncPtrMaps();
 }  // StageAttributesManager ctor
+
+void StageAttributesManager::buildCtorFuncPtrMaps() {
+  this->copyConstructorMap_["StageAttributes"] =
+      &StageAttributesManager::createObjectCopy<attributes::StageAttributes>;
+  // create none-type stage attributes and set as undeletable
+  // based on default
+  auto tmplt = this->createDefaultObject("NONE", true);
+  std::string tmpltHandle = tmplt->getHandle();
+  this->undeletableObjectNames_.insert(tmpltHandle);
+}  // StageAttributesManager::buildCtorFuncPtrMaps
 
 int StageAttributesManager::registerObjectFinalize(
     StageAttributes::ptr stageAttributes,
@@ -85,12 +97,11 @@ int StageAttributesManager::registerObjectFinalize(
     // system - if so then setCollisionAssetIsPrimitive to false
     stageAttributes->setCollisionAssetIsPrimitive(false);
   } else if (std::string::npos != stageAttributesHandle.find("NONE")) {
-    // Render asset handle will be NONE as well - force type to be unknown
+    // Collision asset handle will be NONE as well - force type to be unknown
     stageAttributes->setCollisionAssetType(
         static_cast<int>(AssetType::UNKNOWN));
     stageAttributes->setCollisionAssetIsPrimitive(false);
   } else {
-    // Else, means no collision data specified, use specified render data
     // Else, means no collision data specified, use specified render data
     LOG(INFO)
         << "StageAttributesManager::registerObjectFinalize "

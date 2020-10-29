@@ -91,7 +91,7 @@ void LightLayoutAttributesManager::setValsFromJSONDoc(
 }  // LightLayoutAttributesManager::setValsFromJSONDoc
 
 void LightLayoutAttributesManager::setLightInstanceValsFromJSONDoc(
-    LightInstanceAttributes::ptr lightAttribs,
+    const LightInstanceAttributes::ptr& lightAttribs,
     const io::JsonGenericValue& jsonConfig) {
   // jsonConfig here holds the JSON description for a single light attributes.
   // set position
@@ -124,13 +124,13 @@ void LightLayoutAttributesManager::setLightInstanceValsFromJSONDoc(
     } else {
       const auto& spotArea = jsonConfig["spot"];
       // set inner cone angle
-      io::jsonIntoSetter<double>(
+      io::jsonIntoSetter<Magnum::Rad>(
           spotArea, "innerConeAngle",
           std::bind(&LightInstanceAttributes::setInnerConeAngle, lightAttribs,
                     _1));
 
       // set outer cone angle
-      io::jsonIntoSetter<double>(
+      io::jsonIntoSetter<Magnum::Rad>(
           spotArea, "outerConeAngle",
           std::bind(&LightInstanceAttributes::setOuterConeAngle, lightAttribs,
                     _1));

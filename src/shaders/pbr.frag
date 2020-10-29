@@ -85,7 +85,7 @@ uniform mediump float NormalTextureScale
 #endif
 
 // -------------- shader ------------------
-#if defined(NORMAL_TEXTURE)
+#if defined(NORMAL_TEXTURE) && defined(PRECOMPUTED_TANGENT)
 vec3 getNormalFromNormalMap() {
   vec3 tangentNormal =
 #if defined(NORMAL_TEXTURE_SCALE)
@@ -113,11 +113,15 @@ const float Epsilon = 0.0001;
 // normal: normal direction
 // light: light source direction
 // viwer: camera direction, aka light outgoing direction
-// half: half vector of light and view
-float normalDistribution(vec3 normal, vec3 half, float roughness) {
+// halfVector: half vector of light and view
+float normalDistribution(vec3 normal, vec3 halfVector, float roughness) {
   float a = roughness * roughness;
   float a2 = a * a;
-  float n_dot_h = max(dot(normal, half), 0.0);
+#if defined(DOUBLE_SIDED)
+  float n_dot_h = abs(dot(normal, halfVector));
+#else
+  float n_dot_h = max(dot(normal, halfVector), 0.0);
+#endif
 
   float d = n_dot_h * n_dot_h * (a2 - 1.0) + 1.0;
   d = PI * d * d;
@@ -142,8 +146,13 @@ float specularGeometricAttenuation(vec3 normal,
                                    vec3 light,
                                    vec3 view,
                                    float roughness) {
+#if defined(DOUBLE_SIDED)
+  float n_dot_l = abs(dot(normal, light));
+  float n_dot_v = abs(dot(normal, view));
+#else
   float n_dot_l = max(dot(normal, light), 0.0);
   float n_dot_v = max(dot(normal, view), 0.0);
+#endif
   float ggx1 = geometrySchlickGGX(n_dot_l, roughness);
   float ggx2 = geometrySchlickGGX(n_dot_v, roughness);
 
@@ -153,9 +162,9 @@ float specularGeometricAttenuation(vec3 normal,
 // Specular F, aka Fresnel, use Schlick's approximation
 // F0: specular reflectance at normal incidence
 // view: camera direction, aka light outgoing direction
-// half: half vector of light and view
-vec3 fresnelSchlick(vec3 F0, vec3 view, vec3 half) {
-  float v_dot_h = max(dot(view, half), 0.0);
+// halfVector: half vector of light and view
+vec3 fresnelSchlick(vec3 F0, vec3 view, vec3 halfVector) {
+  float v_dot_h = max(dot(view, halfVector), 0.0);
   return F0 + (1.0 - F0) * pow(1.0 - v_dot_h, 5.0);
 }
 
@@ -177,11 +186,11 @@ vec3 microfacetModel(vec3 baseColor,
                      vec3 light,
                      vec3 view,
                      vec3 lightRadiance) {
-  vec3 half = normalize(light + view);
+  vec3 halfVector = normalize(light + view);
   // compute F0, specular reflectance at normal incidence
   // for nonmetal, using constant 0.04
   vec3 F0 = mix(vec3(0.04), baseColor, metallic);
-  vec3 Fresnel = fresnelSchlick(F0, view, half);
+  vec3 Fresnel = fresnelSchlick(F0, view, halfVector);
 
   // Diffuse BRDF
   // NOTE: energy conservation requires
@@ -192,14 +201,24 @@ vec3 microfacetModel(vec3 baseColor,
   vec3 diffuse = mix(vec3(1.0) - Fresnel, vec3(0.0), metallic) * baseColor;
 
   // Specular BDDF
+#if defined(DOUBLE_SIDED)
+  float temp =
+      max(4.0 * abs(dot(normal, light)) * abs(dot(normal, view)), Epsilon);
+#else
   float temp =
       max(4.0 * max(dot(normal, light), 0.0) * max(dot(normal, view), 0.0),
           Epsilon);
+#endif
   vec3 specular = Fresnel *
                   specularGeometricAttenuation(normal, light, view, roughness) *
-                  normalDistribution(normal, half, roughness) / temp;
+                  normalDistribution(normal, halfVector, roughness) / temp;
 
-  return (diffuse + specular) * lightRadiance * max(dot(normal, light), 0.0);
+  return (diffuse + specular) * lightRadiance *
+#if defined(DOUBLE_SIDED)
+  abs(dot(normal, light));
+#else
+  max(dot(normal, light), 0.0);
+#endif
 }
 
 void main() {
@@ -229,7 +248,9 @@ void main() {
   metallic *= texture(MetallicTexture, texCoord).r;
 #endif
 
-#if defined(NORMAL_TEXTURE)
+// normal map will only work if both normal texture and the tangents exist.
+// if only normal texture is set, normal mapping will be safely ignored.
+#if defined(NORMAL_TEXTURE) && defined(PRECOMPUTED_TANGENT)
   // normal is now in the camera space
   vec3 n = getNormalFromNormalMap();
 #else

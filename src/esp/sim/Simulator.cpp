@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include <Corrade/Utility/Directory.h>
 #include <Corrade/Utility/String.h>
@@ -76,9 +77,9 @@ void Simulator::reconfigure(const SimulatorConfiguration& cfg) {
   // set dataset upon creation or reconfigure
   if (!metadataMediator_) {
     metadataMediator_ =
-        metadata::MetadataMediator::create(cfg.datasetConfigFile);
+        metadata::MetadataMediator::create(cfg.sceneDatasetConfigFile);
   } else {
-    metadataMediator_->setActiveDatasetName(cfg.datasetConfigFile);
+    metadataMediator_->setActiveSceneDatasetName(cfg.sceneDatasetConfigFile);
   }
   // assign MM to RM on create or reconfigure
   if (!resourceManager_) {
@@ -779,7 +780,7 @@ nav::PathFinder::ptr Simulator::getPathFinder() {
 }
 
 void Simulator::setPathFinder(nav::PathFinder::ptr pathfinder) {
-  pathfinder_ = pathfinder;
+  pathfinder_ = std::move(pathfinder);
 }
 gfx::RenderTarget* Simulator::getRenderTarget(int agentId,
                                               const std::string& sensorId) {
