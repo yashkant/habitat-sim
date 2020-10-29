@@ -534,6 +534,23 @@ jobs:
               lcov --remove coverage.info "*/test/*" --output-file coverage.info > /dev/null
               lcov --remove coverage.info "*/tests/*" --output-file coverage.info > /dev/null
               bash <(curl -s https://codecov.io/bash) -f coverage.info -cF CPP
+  ubuntu_address_sanitizer:
+    <<: *gpu
+    steps:
+      - checkout:
+          path: ./habitat-sim
+      - run:
+          name: CPU info
+          no_output_timeout: 1m
+          command: |
+              cat /proc/cpuinfo
+      - install_all_ubuntu_deps
+      - run:
+          name: run CORRADE ASAN
+          comand: |
+            cd habitat-sim
+            rm -rf build
+            tools/run_ASAN.sh
 
 
 
@@ -628,6 +645,7 @@ workflows:
       - js_lint
       - build_and_test_habitat_lab_conda
       - install_and_test_ubuntu
+      - ubuntu_address_sanitizer
       - pre-commit
   nightly:
     triggers:
