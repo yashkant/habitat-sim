@@ -549,6 +549,7 @@ jobs:
           name: run CORRADE ASAN
           command: |
             cd habitat-sim
+            while [ ! -f ~/cuda_installed ]; do sleep 2; done # wait for CUDA
             rm -rf build
             tools/run_ASAN.sh
 
