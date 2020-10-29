@@ -547,7 +547,7 @@ jobs:
       - install_all_ubuntu_deps
       - run:
           name: run CORRADE ASAN
-          comand: |
+          command: |
             cd habitat-sim
             rm -rf build
             tools/run_ASAN.sh
