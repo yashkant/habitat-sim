@@ -69,6 +69,20 @@ LightSetup getLightsAtBoxCorners(
 LightSetup getDefaultLights();
 
 /**
+ * @brief Get a @ref LightSetup with three point lighting (key, fill rim).
+ * Three lights are directional lights in camera space.
+ * Key lights:
+ *   direction: (1, -1, -1) (from position (-1, 1, 1) to origin)
+ * Fill lights:
+ *   direction: (-1, 1, -1) (from position (1, -1, 1) to origin)
+ *   It is the weakest among the three.
+ * Rim lights:
+ *   direction: (0, 0, 1).
+ *   It is the strongest among the three.
+ */
+LightSetup getDefaultThreeLights();
+
+/**
  * @brief Get get a single, combined ambient light color for use with the Phong
  * lighting model.
  */

@@ -55,8 +55,37 @@ LightSetup getLightsAtBoxCorners(const Magnum::Range3D& box,
 }
 
 LightSetup getDefaultLights() {
+  return getDefaultThreeLights();
+  // XXX
   return LightSetup{{{1.0, 1.0, 0.0, 0.0}, {0.75, 0.75, 0.75}},
                     {{-0.5, 0.0, 1.0, 0.0}, {0.4, 0.4, 0.4}}};
+}
+
+/**
+ * @brief Get a @ref LightSetup with three point lighting (key, fill rim).
+ * Three lights are directional lights in camera space.
+ * Key lights:
+ *   direction: (1, -1, -1) (from position (-1, 1, 1) to origin)
+ * Fill lights:
+ *   direction: (-1, 1, -1) (from position (1, -1, 1) to origin)
+ *   It is the weakest among the three.
+ * Rim lights:
+ *   direction: (0, 0, 1).
+ *   It is the strongest among the three.
+ */
+
+LightSetup getDefaultThreeLights() {
+  return LightSetup{
+      {{1.0, -1.0, -1.0, 0.0},
+       {1.2, 1.2, 1.2},
+       LightPositionModel::CAMERA},  // Key light
+      {{-1.0, 1.0, -1.0, 0.0},
+       {0.4, 0.4, 0.4},
+       LightPositionModel::CAMERA},  // Fill light
+      {{0.0, 0.0, 1.0, 0.0},
+       {0.5, 0.5, 0.5},
+       LightPositionModel::CAMERA},  // Rim light
+  };
 }
 
 Magnum::Color3 getAmbientLightColor(const LightSetup& lightSetup) {
