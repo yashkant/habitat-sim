@@ -12,5 +12,5 @@ export LSAN_OPTIONS="suppressions=${GIT_ROOT_DIR}/tools/lsan_suppressions.txt"
 export CORRADE_TEST_COLOR=ON
 export GTEST_COLOR=yes
 #build/tests/SimTest
-"${GIT_ROOT_DIR}/build.sh" --with-cuda --headless --bullet --build-datatool  --debug --run-tests --cmake --cmake-args="-Dgtest_disable_pthreads=ON"
+"${GIT_ROOT_DIR}/build.sh" --with-cuda --bullet --build-datatool  --debug --run-tests --cmake --cmake-args="-Dgtest_disable_pthreads=ON"
 #TODO Add Python Tests for ASAN
