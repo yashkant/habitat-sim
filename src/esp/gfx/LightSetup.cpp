@@ -76,13 +76,26 @@ LightSetup getDefaultLights() {
 
 LightSetup getDefaultThreeLights() {
   return LightSetup{
-      {{1.0, -1.0, -1.0, 0.0},
-       {1.2, 1.2, 1.2},
+      /*
+        {{1.0, -1.0, -1.0, 0.0},
+         {12, 12, 12},
+         LightPositionModel::CAMERA},  // Key light
+        {{-1.0, 1.0, -1.0, 0.0},
+         {0.4, 0.4, 0.4},
+         LightPositionModel::CAMERA},  // Fill light
+        {{0.0, 0.0, 1.0, 0.0},
+         {0.5, 0.5, 0.5},
+         LightPositionModel::CAMERA},  // Rim light
+         */
+      {{10.0f, 10.0f, 10.0f, 0.0},
+       {1.25, 1.25, 1.25},
        LightPositionModel::CAMERA},  // Key light
-      {{-1.0, 1.0, -1.0, 0.0},
-       {0.4, 0.4, 0.4},
+      // {{-50.f, -50.0f, 100.0f, 0.0},
+      {{-5.0f, -5.0f, 10.0f, 0.0},
+       {0.5, 0.5, 0.5},
        LightPositionModel::CAMERA},  // Fill light
-      {{0.0, 0.0, 1.0, 0.0},
+      // {{0.0f, 100.0f, -100.0f, 0.0},
+      {{0.0f, 10.0f, -10.0f, 0.0},
        {0.5, 0.5, 0.5},
        LightPositionModel::CAMERA},  // Rim light
   };

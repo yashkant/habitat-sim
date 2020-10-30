@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include <ctime>
+#include <fstream>
 
 #include <Magnum/configure.h>
 #include <Magnum/ImGuiIntegration/Context.hpp>
@@ -23,6 +24,7 @@
 #include <Magnum/Shaders/Generic.h>
 #include <Magnum/Shaders/Shaders.h>
 
+#include "esp/core/esp.h"
 #include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/Renderer.h"
 #include "esp/nav/PathFinder.h"
@@ -126,6 +128,9 @@ class Viewer : public Mn::Platform::Application {
   void wiggleLastObject();
   void invertGravity();
   Mn::Vector3 randomDirection();
+
+  void saveObjectTransformToFile();
+  void loadObjectTransformFromFile();
 
   //! string rep of time when viewer application was started
   std::string viewerStartTimeString = getCurrentTimeString();
@@ -422,14 +427,74 @@ int Viewer::addObject(int ID) {
 int Viewer::addObject(const std::string& objectAttrHandle) {
   // Relative to agent bodynode
   Mn::Matrix4 T = agentBodyNode_->MagnumObject::transformationMatrix();
-  Mn::Vector3 new_pos = T.transformPoint({0.1f, 1.5f, -2.0f});
+  // Mn::Vector3 new_pos = T.transformPoint({0.1f, 1.5f, -2.0f});
+  Mn::Vector3 new_pos =
+      T.transformPoint({0.0f, 0.6f, -2.0f});  // antique camera
 
   int physObjectID = simulator_->addObjectByHandle(objectAttrHandle);
   simulator_->setTranslation(new_pos, physObjectID);
   simulator_->setRotation(Mn::Quaternion::fromMatrix(T.rotationNormalized()),
                           physObjectID);
+
+  /*
+  const auto& box =
+  simulator_->getObjectSceneNode(physObjectID)->getCumulativeBB(); Mn::Vector3
+  boxSize = box.max() - box.min(); LOG(INFO) << "box size: " << boxSize[0] << ",
+  " << boxSize[1] << ", "
+            << boxSize[2];
+  */
   return physObjectID;
 }  // addObject
+
+void Viewer::saveObjectTransformToFile() {
+  auto existingObjectIDs = simulator_->getExistingObjectIDs();
+  if (existingObjectIDs.size() == 0) {
+    LOG(INFO) << "No object in the queue. Does not have transformation data to "
+                 "save.";
+    return;
+  }
+  std::ofstream file("objectTransform.txt");
+  if (!file.good()) {
+    LOG(INFO) << "cannot open objectTransform.txt to output data";
+    return;
+  }
+  int lastObject = existingObjectIDs.back();
+  Mn::Matrix4 transform = simulator_->getTransformation(lastObject);
+  // column major order
+  // file << Eigen::Map<esp::mat4f>(transform.data());
+  float* t = transform.data();
+  for (int i = 0; i < 16; ++i) {
+    file << t[i] << " ";
+  }
+  LOG(INFO) << "Transformation matrix of the last object is saved to "
+               "objectTransform.txt";
+  file.close();
+}
+
+void Viewer::loadObjectTransformFromFile() {
+  auto existingObjectIDs = simulator_->getExistingObjectIDs();
+  if (existingObjectIDs.size() == 0) {
+    LOG(INFO) << "No object in the queue to be set the transformation data";
+    return;
+  }
+  std::ifstream file("objectTransform.txt");
+  if (!file.good()) {
+    LOG(INFO) << "cannot open objectTransform.txt to load data";
+    return;
+  }
+
+  Mn::Vector4 cols[4];
+  for (int col = 0; col < 4; ++col) {
+    for (int i = 0; i < 4; ++i) {
+      file >> cols[col][i];
+    }
+  }
+  Mn::Matrix4 transform{cols[0], cols[1], cols[2], cols[3]};
+  LOG(INFO) << "The loaded transformation matrix: "
+            << Eigen::Map<esp::mat4f>(transform.data());
+  simulator_->setTransformation(transform, existingObjectIDs.back());
+  file.close();
+}
 
 // add file-based template derived object from keypress
 int Viewer::addTemplateObject() {
@@ -766,6 +831,12 @@ void Viewer::keyPressEvent(KeyEvent& event) {
   switch (key) {
     case KeyEvent::Key::Esc:
       std::exit(0);
+      break;
+    case KeyEvent::Key::LeftBracket:
+      saveObjectTransformToFile();
+      break;
+    case KeyEvent::Key::RightBracket:
+      loadObjectTransformFromFile();
       break;
     case KeyEvent::Key::Space:
       simulating_ = !simulating_;
