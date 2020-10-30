@@ -13,7 +13,7 @@ export CORRADE_TEST_COLOR=ON
 export GTEST_COLOR=yes
 #build/tests/SimTest
 #"${GIT_ROOT_DIR}/build.sh" --with-cuda --headless --bullet --build-datatool  --debug --run-tests --cmake --cmake-args="-Dgtest_disable_pthreads=ON"
-'cmake' "-H$(pwd)/src" '-Bbuild' '-DBUILD_PYTHON_BINDINGS=OFF' "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$(pwd)/habitat_sim/_ext" '-DPYTHON_EXECUTABLE=/Users/agokaslan/venv/ai_habitat/bin/python' -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -Dgtest_disable_pthreads=ON -DCMAKE_BUILD_TYPE=Debug -DBUILD_GUI_VIEWERS=OFF -DBUILD_TEST=ON -DBUILD_WITH_BULLET=ON -DBUILD_DATATOOL=ON
+'cmake' "-H$(pwd)/src" '-Bbuild' '-DBUILD_PYTHON_BINDINGS=OFF' "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$(pwd)/habitat_sim/_ext" '-DPYTHON_EXECUTABLE=/Users/agokaslan/venv/ai_habitat/bin/python' -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -Dgtest_disable_pthreads=ON -DCMAKE_BUILD_TYPE=Debug -DBUILD_GUI_VIEWERS=OFF -DBUILD_TEST=ON -DBUILD_WITH_BULLET=ON -DBUILD_DATATOOL=ON -DTARGET_HEADLESS=OFF
 cd build || exit
 make -j 4
 ctest -V
