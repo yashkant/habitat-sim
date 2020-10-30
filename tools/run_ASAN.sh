@@ -1,5 +1,7 @@
 #!/bin/bash
 # export LD_PRELOAD="$(gcc -print-file-name=libasan.so):$LD_PRELOAD"
+export MAGNUM_GPU_VALIDATION=ON
+export MAGNUM_LOG=verbose
 export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/nvidia-opengl/:$LD_LIBRARY_PATH
 C_COMPILER_FLAGS="-fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -O1"
 export CXXFLAGS="${C_COMPILER_FLAGS}"
