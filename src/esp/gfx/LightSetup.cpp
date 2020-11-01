@@ -77,26 +77,28 @@ LightSetup getDefaultLights() {
 LightSetup getDefaultThreeLights() {
   return LightSetup{
       /*
-        {{1.0, -1.0, -1.0, 0.0},
-         {12, 12, 12},
-         LightPositionModel::CAMERA},  // Key light
-        {{-1.0, 1.0, -1.0, 0.0},
-         {0.4, 0.4, 0.4},
-         LightPositionModel::CAMERA},  // Fill light
-        {{0.0, 0.0, 1.0, 0.0},
-         {0.5, 0.5, 0.5},
-         LightPositionModel::CAMERA},  // Rim light
-         */
+      {{1.0, -1.0, -1.0, 0.0},
+       {2, 2, 2},
+       LightPositionModel::CAMERA},  // Key light
+      {{-1.0, 1.0, -1.0, 0.0},
+       {0.4, 0.4, 0.4},
+       LightPositionModel::CAMERA},  // Fill light
+      {{0.0, 0.0, 1.0, 0.0},
+       {0.5, 0.5, 0.5},
+       LightPositionModel::CAMERA},  // Rim light
+       */
+
       {{10.0f, 10.0f, 10.0f, 0.0},
        {1.25, 1.25, 1.25},
+       // {1.35, 1.35, 1.35},    // antique camera
        LightPositionModel::CAMERA},  // Key light
-      // {{-50.f, -50.0f, 100.0f, 0.0},
       {{-5.0f, -5.0f, 10.0f, 0.0},
-       {0.5, 0.5, 0.5},
+       // {0.8, 0.8, 0.8},         // antique camera
+       {0.8, 0.8, 0.8},              // flying helmet
        LightPositionModel::CAMERA},  // Fill light
-      // {{0.0f, 100.0f, -100.0f, 0.0},
       {{0.0f, 10.0f, -10.0f, 0.0},
-       {0.5, 0.5, 0.5},
+       // {0.5, 0.5, 0.5},        // antique camera
+       {0.1, 0.1, 0.1},              // flying helmet
        LightPositionModel::CAMERA},  // Rim light
   };
 }

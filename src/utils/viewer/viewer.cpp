@@ -247,6 +247,13 @@ Key Commands:
   std::unique_ptr<ObjectPickingHelper> objectPickingHelper_;
   // returns the number of visible drawables (meshVisualizer drawables are not
   // included)
+
+  bool flyingCameraMode_ = false;
+  double focusPosition_[3];         // where the camera is aiming at, in world
+                                    // coordinate frame
+  double up_[3] = {0.0, 1.0, 0.0};  // the up vector, in world coordinate frame
+  double R_, Phi_, Theta_;          // the current values
+  void decideCameraParameters(Mn::Range3D& objectBoundingBox);
 };
 
 Viewer::Viewer(const Arguments& arguments)
@@ -429,7 +436,15 @@ int Viewer::addObject(const std::string& objectAttrHandle) {
   Mn::Matrix4 T = agentBodyNode_->MagnumObject::transformationMatrix();
   // Mn::Vector3 new_pos = T.transformPoint({0.1f, 1.5f, -2.0f});
   Mn::Vector3 new_pos =
-      T.transformPoint({0.0f, 0.6f, -2.0f});  // antique camera
+      // T.transformPoint({0.0f, 0.6f, -2.0f});  // antique camera (castle)
+      // T.transformPoint({0.0f, 0.3f, -2.0f});  // flying helmet (castle)
+      // T.transformPoint(
+      //    {0.0f, 1.1f, -2.0f});  // flying helmet (sample ey2MmoYCyzZ)
+      // T.transformPoint({0.0f, 0.6f, -2.0f});  // damaged helmet (castle)
+      T.transformPoint({0.0f, 1.08f, -2.0f});  // damaged helmet (ey2MmoYCyzZ)
+  // T.transformPoint({0.0f, 2.1f, -2.0f});  // lantern (on Joe_1-6YruRidFpY2)
+  // T.transformPoint({0.0f, -1.05f, -2.0f});  // water bottle (on apt.1)
+  // T.transformPoint({0.0f, 0.2f, -2.0f});  // Corset (castle)
 
   int physObjectID = simulator_->addObjectByHandle(objectAttrHandle);
   simulator_->setTranslation(new_pos, physObjectID);
@@ -445,6 +460,15 @@ int Viewer::addObject(const std::string& objectAttrHandle) {
   */
   return physObjectID;
 }  // addObject
+void Viewer::decideCameraParameters(Mn::Range3D& objectBoundingBox) {
+  // because we compute the camera in the object space:
+  focusPosition_[0] = 0.0;
+  focusPosition_[1] = 0.0;
+  focusPosition_[2] = 0.0;
+
+  Mn::Vector3 c = objectBoundingBox.center();
+  R_ = (objectBoundingBox.max() - objectBoundingBox.min()).length() * 1.5;
+}
 
 void Viewer::saveObjectTransformToFile() {
   auto existingObjectIDs = simulator_->getExistingObjectIDs();
@@ -469,6 +493,22 @@ void Viewer::saveObjectTransformToFile() {
   LOG(INFO) << "Transformation matrix of the last object is saved to "
                "objectTransform.txt";
   file.close();
+
+  // now save the camera:
+  file.open("cameraTransform.txt");
+  if (!file.good()) {
+    LOG(INFO) << "cannot open cameraTransform.txt to output camera data";
+    return;
+  }
+
+  transform = renderCamera_->node().absoluteTransformation();
+  t = transform.data();
+  for (int i = 0; i < 16; ++i) {
+    file << t[i] << " ";
+  }
+  LOG(INFO) << "Transformation matrix of the camera is saved to "
+               "objectTransform.txt";
+  file.close();
 }
 
 void Viewer::loadObjectTransformFromFile() {
@@ -482,7 +522,26 @@ void Viewer::loadObjectTransformFromFile() {
     LOG(INFO) << "cannot open objectTransform.txt to load data";
     return;
   }
+  {
+    Mn::Vector4 cols[4];
+    for (int col = 0; col < 4; ++col) {
+      for (int i = 0; i < 4; ++i) {
+        file >> cols[col][i];
+      }
+    }
+    Mn::Matrix4 transform{cols[0], cols[1], cols[2], cols[3]};
+    LOG(INFO) << "The loaded object transformation matrix: "
+              << Eigen::Map<esp::mat4f>(transform.data());
+    simulator_->setTransformation(transform, existingObjectIDs.back());
+  }
+  file.close();
 
+  // now load the camera
+  file.open("cameraTransform.txt");
+  if (!file.good()) {
+    LOG(INFO) << "cannot open cameraTransform.txt to load data";
+    return;
+  }
   Mn::Vector4 cols[4];
   for (int col = 0; col < 4; ++col) {
     for (int i = 0; i < 4; ++i) {
@@ -490,9 +549,9 @@ void Viewer::loadObjectTransformFromFile() {
     }
   }
   Mn::Matrix4 transform{cols[0], cols[1], cols[2], cols[3]};
-  LOG(INFO) << "The loaded transformation matrix: "
+  LOG(INFO) << "The loaded camera transformation matrix: "
             << Eigen::Map<esp::mat4f>(transform.data());
-  simulator_->setTransformation(transform, existingObjectIDs.back());
+  renderCamera_->node().setTransformation(transform);
   file.close();
 }
 
@@ -609,60 +668,68 @@ void Viewer::drawEvent() {
     timeSinceLastSimulation = 0.0;
     simulateSingleStep_ = false;
   }
-
-  // using polygon offset to increase mesh depth to a avoid z-fighting with
-  // debug draw (since lines will not respond to offset).
-  Mn::GL::Renderer::enable(Mn::GL::Renderer::Feature::PolygonOffsetFill);
-  Mn::GL::Renderer::setPolygonOffset(1.0f, 0.1f);
-
-  // ONLY draw the content to the frame buffer but not immediately blit the
-  // result to the default main buffer
-  // (this is the reason we do not call displayObservation)
-  simulator_->drawObservation(defaultAgentId_, "rgba_camera");
-  // TODO: enable other sensors to be displayed
-
-  Mn::GL::Renderer::setDepthFunction(
-      Mn::GL::Renderer::DepthFunction::LessOrEqual);
-  if (debugBullet_) {
-    Mn::Matrix4 camM(renderCamera_->cameraMatrix());
-    Mn::Matrix4 projM(renderCamera_->projectionMatrix());
-
-    simulator_->physicsDebugDraw(projM * camM);
-  }
-  Mn::GL::Renderer::setDepthFunction(Mn::GL::Renderer::DepthFunction::Less);
-  Mn::GL::Renderer::setPolygonOffset(0.0f, 0.0f);
-  Mn::GL::Renderer::disable(Mn::GL::Renderer::Feature::PolygonOffsetFill);
-
-  uint32_t visibles = renderCamera_->getPreviousNumVisibileDrawables();
-
-  esp::gfx::RenderTarget* sensorRenderTarget =
-      simulator_->getRenderTarget(defaultAgentId_, "rgba_camera");
-  CORRADE_ASSERT(sensorRenderTarget,
-                 "Error in Viewer::drawEvent: sensor's rendering target "
-                 "cannot be nullptr.", );
-  if (objectPickingHelper_->isObjectPicked()) {
-    // we need to immediately draw picked object to the SAME frame buffer
-    // so bind it first
-    // bind the framebuffer
-    sensorRenderTarget->renderReEnter();
-
-    // setup blending function
-    Mn::GL::Renderer::enable(Mn::GL::Renderer::Feature::Blending);
-
-    // render the picked object on top of the existing contents
-    esp::gfx::RenderCamera::Flags flags;
-    if (simulator_->isFrustumCullingEnabled()) {
-      flags |= esp::gfx::RenderCamera::Flag::FrustumCulling;
+  uint32_t visibles = 0;
+  if (flyingCameraMode_) {
+    Mn::GL::defaultFramebuffer.bind();
+    for (auto& it : activeSceneGraph_->getDrawableGroups()) {
+      esp::gfx::RenderCamera::Flags flags =
+          esp::gfx::RenderCamera::Flag::FrustumCulling;
+      visibles = renderCamera_->draw(it.second, flags);
     }
-    renderCamera_->draw(objectPickingHelper_->getDrawables(), flags);
+  } else {
+    // using polygon offset to increase mesh depth to a avoid z-fighting with
+    // debug draw (since lines will not respond to offset).
+    Mn::GL::Renderer::enable(Mn::GL::Renderer::Feature::PolygonOffsetFill);
+    Mn::GL::Renderer::setPolygonOffset(1.0f, 0.1f);
 
-    Mn::GL::Renderer::disable(Mn::GL::Renderer::Feature::Blending);
+    // ONLY draw the content to the frame buffer but not immediately blit the
+    // result to the default main buffer
+    // (this is the reason we do not call displayObservation)
+    simulator_->drawObservation(defaultAgentId_, "rgba_camera");
+    // TODO: enable other sensors to be displayed
+
+    Mn::GL::Renderer::setDepthFunction(
+        Mn::GL::Renderer::DepthFunction::LessOrEqual);
+    if (debugBullet_) {
+      Mn::Matrix4 camM(renderCamera_->cameraMatrix());
+      Mn::Matrix4 projM(renderCamera_->projectionMatrix());
+
+      simulator_->physicsDebugDraw(projM * camM);
+    }
+    Mn::GL::Renderer::setDepthFunction(Mn::GL::Renderer::DepthFunction::Less);
+    Mn::GL::Renderer::setPolygonOffset(0.0f, 0.0f);
+    Mn::GL::Renderer::disable(Mn::GL::Renderer::Feature::PolygonOffsetFill);
+
+    visibles = renderCamera_->getPreviousNumVisibileDrawables();
+    esp::gfx::RenderTarget* sensorRenderTarget =
+        simulator_->getRenderTarget(defaultAgentId_, "rgba_camera");
+    CORRADE_ASSERT(sensorRenderTarget,
+                   "Error in Viewer::drawEvent: sensor's rendering target "
+                   "cannot be nullptr.", );
+    if (objectPickingHelper_->isObjectPicked()) {
+      // we need to immediately draw picked object to the SAME frame buffer
+      // so bind it first
+      // bind the framebuffer
+      sensorRenderTarget->renderReEnter();
+
+      // setup blending function
+      Mn::GL::Renderer::enable(Mn::GL::Renderer::Feature::Blending);
+
+      // render the picked object on top of the existing contents
+      esp::gfx::RenderCamera::Flags flags;
+      if (simulator_->isFrustumCullingEnabled()) {
+        flags |= esp::gfx::RenderCamera::Flag::FrustumCulling;
+      }
+      renderCamera_->draw(objectPickingHelper_->getDrawables(), flags);
+
+      Mn::GL::Renderer::disable(Mn::GL::Renderer::Feature::Blending);
+    }
+
+    sensorRenderTarget->blitRgbaToDefault();
+    // Immediately bind the main buffer back so that the "imgui" below can work
+    // properly
+    Mn::GL::defaultFramebuffer.bind();
   }
-
-  sensorRenderTarget->blitRgbaToDefault();
-  // Immediately bind the main buffer back so that the "imgui" below can work
-  // properly
-  Mn::GL::defaultFramebuffer.bind();
 
   imgui_.newFrame();
 
@@ -713,6 +780,9 @@ void Viewer::viewportEvent(ViewportEvent& event) {
     }
   }
   Mn::GL::defaultFramebuffer.setViewport({{}, framebufferSize()});
+  if (flyingCameraMode_) {
+    renderCamera_->setViewport(event.windowSize());
+  }
 
   imgui_.relayout(Mn::Vector2{event.windowSize()} / event.dpiScaling(),
                   event.windowSize(), event.framebufferSize());
@@ -831,6 +901,10 @@ void Viewer::keyPressEvent(KeyEvent& event) {
   switch (key) {
     case KeyEvent::Key::Esc:
       std::exit(0);
+      break;
+    case KeyEvent::Key::One:
+      flyingCameraMode_ = !flyingCameraMode_;
+      LOG(INFO) << "Flying camera mode: " << (flyingCameraMode_ ? "ON" : "OFF");
       break;
     case KeyEvent::Key::LeftBracket:
       saveObjectTransformToFile();
