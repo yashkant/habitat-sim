@@ -560,7 +560,7 @@ jobs:
             export PYTHONUNBUFFERED=1
             # CUDA isn't needed until here
             while [ ! -f ~/cuda_installed ]; do sleep 2; done # wait for CUDA
-            sudo apt-get install -y clang lld llvm
+            sudo apt-get install -y clang llvm
             rm -rf build
             tools/run_ASAN.sh
 
