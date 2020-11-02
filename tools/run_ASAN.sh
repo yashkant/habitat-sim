@@ -1,5 +1,7 @@
 #!/bin/bash
 # export LD_PRELOAD="$(gcc -print-file-name=libasan.so):$LD_PRELOAD"
+export CC=clang
+export CXX=clang++
 export MAGNUM_GPU_VALIDATION=ON
 export MAGNUM_LOG=verbose
 export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/nvidia-opengl/:$LD_LIBRARY_PATH
@@ -12,9 +14,9 @@ export LSAN_OPTIONS="suppressions=${GIT_ROOT_DIR}/tools/lsan_suppressions.txt"
 export CORRADE_TEST_COLOR=ON
 export GTEST_COLOR=yes
 #build/tests/SimTest
-#"${GIT_ROOT_DIR}/build.sh" --with-cuda --headless --bullet --build-datatool  --debug --run-tests --cmake --cmake-args="-Dgtest_disable_pthreads=ON"
-'cmake' "-H$(pwd)/src" '-Bbuild' '-DBUILD_PYTHON_BINDINGS=OFF' "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$(pwd)/habitat_sim/_ext" '-DPYTHON_EXECUTABLE=/Users/agokaslan/venv/ai_habitat/bin/python' -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -Dgtest_disable_pthreads=ON -DCMAKE_BUILD_TYPE=Debug -DBUILD_GUI_VIEWERS=OFF -DBUILD_TEST=ON -DBUILD_WITH_BULLET=ON -DBUILD_DATATOOL=ON
-cd build || exit
-make -j 4
-ctest -V
+"${GIT_ROOT_DIR}/build.sh" --with-cuda --headless --bullet --build-datatool  --debug --run-tests --cmake --cmake-args="-Dgtest_disable_pthreads=ON"
+#'cmake' "-H$(pwd)/src" '-Bbuild' '-DBUILD_PYTHON_BINDINGS=OFF' "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$(pwd)/habitat_sim/_ext" '-DPYTHON_EXECUTABLE=/Users/agokaslan/venv/ai_habitat/bin/python' -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -Dgtest_disable_pthreads=ON -DCMAKE_BUILD_TYPE=Debug -DBUILD_GUI_VIEWERS=OFF -DBUILD_TEST=ON -DBUILD_WITH_BULLET=ON -DBUILD_DATATOOL=ON
+#cd build || exit
+#make -j 4
+#ctest -V
 #TODO Add Python Tests for ASAN
