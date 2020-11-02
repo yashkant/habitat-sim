@@ -545,6 +545,10 @@ jobs:
           command: |
               cat /proc/cpuinfo
       - install_all_ubuntu_deps
+      - run:
+          name: "install clang"
+          command: |
+            sudo apt-get install -y clang lld llvm
       - run: *download_test_data
       - run:
           name: run CORRADE ASAN
