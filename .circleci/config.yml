@@ -545,10 +545,6 @@ jobs:
           command: |
               cat /proc/cpuinfo
       - install_all_ubuntu_deps
-      - run:
-          name: "install clang"
-          command: |
-            sudo apt-get install -y clang lld llvm
       - run: *download_test_data
       - run:
           name: run CORRADE ASAN
@@ -564,6 +560,7 @@ jobs:
             export PYTHONUNBUFFERED=1
             # CUDA isn't needed until here
             while [ ! -f ~/cuda_installed ]; do sleep 2; done # wait for CUDA
+            sudo apt-get install -y clang lld llvm
             rm -rf build
             tools/run_ASAN.sh
 
