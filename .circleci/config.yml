@@ -382,7 +382,8 @@ jobs:
               export PATH=$HOME/miniconda/bin:$PATH
               . activate habitat; cd habitat-lab
               python -u setup.py develop --all
-              python -u setup.py test
+              #python -u setup.py test
+              pytest --typeguard-packages="habitat_sim,habitat,habitat_baselines"
       - save_cache:
           key: habitat-lab-{{ checksum "./hablab_sha" }}
           background: true
