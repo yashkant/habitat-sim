@@ -437,11 +437,11 @@ int Viewer::addObject(const std::string& objectAttrHandle) {
   // Mn::Vector3 new_pos = T.transformPoint({0.1f, 1.5f, -2.0f});
   Mn::Vector3 new_pos =
       // T.transformPoint({0.0f, 0.6f, -2.0f});  // antique camera (castle)
-      // T.transformPoint({0.0f, 0.3f, -2.0f});  // flying helmet (castle)
-      // T.transformPoint(
-      //    {0.0f, 1.1f, -2.0f});  // flying helmet (sample ey2MmoYCyzZ)
-      // T.transformPoint({0.0f, 0.6f, -2.0f});  // damaged helmet (castle)
-      T.transformPoint({0.0f, 1.08f, -2.0f});  // damaged helmet (ey2MmoYCyzZ)
+      T.transformPoint({0.0f, 0.3f, -2.0f});  // flying helmet (castle)
+                                              // T.transformPoint(
+  //    {0.0f, 1.1f, -2.0f});  // flying helmet (sample ey2MmoYCyzZ)
+  // T.transformPoint({0.0f, 0.6f, -2.0f});  // damaged helmet (castle)
+  // T.transformPoint({0.0f, 1.08f, -2.0f});  // damaged helmet (ey2MmoYCyzZ)
   // T.transformPoint({0.0f, 2.1f, -2.0f});  // lantern (on Joe_1-6YruRidFpY2)
   // T.transformPoint({0.0f, -1.05f, -2.0f});  // water bottle (on apt.1)
   // T.transformPoint({0.0f, 0.2f, -2.0f});  // Corset (castle)
