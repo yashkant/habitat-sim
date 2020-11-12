@@ -5,7 +5,8 @@ export CXX=clang++
 export MAGNUM_GPU_VALIDATION=ON
 export MAGNUM_LOG=verbose
 export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/nvidia-opengl/:$LD_LIBRARY_PATH
-C_COMPILER_FLAGS="-fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -O1"
+#C_COMPILER_FLAGS="-fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -O1"
+C_COMPILER_FLAGS="-fsanitize=leak -fno-omit-frame-pointer -g -O1"
 export CXXFLAGS="${C_COMPILER_FLAGS}"
 export CFLAGS="${C_COMPILER_FLAGS}"
 GIT_ROOT_DIR="$(git rev-parse --show-toplevel)"
