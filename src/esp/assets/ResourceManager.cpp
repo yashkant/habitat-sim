@@ -41,7 +41,6 @@
 #include "esp/io/io.h"
 #include "esp/io/json.h"
 #include "esp/physics/PhysicsManager.h"
-#include "esp/scene/SceneConfiguration.h"
 #include "esp/scene/SceneGraph.h"
 
 #include "esp/nav/PathFinder.h"
@@ -1386,6 +1385,10 @@ gfx::PbrMaterialData::uptr ResourceManager::buildPbrShadedMaterialData(
     // same texture ID, so just roughnessTexture
     finalMaterial->noneRoughnessMetallicTexture =
         textures_[textureBaseIndex + material.roughnessTexture()].get();
+  }
+
+  if (material.isDoubleSided()) {
+    finalMaterial->doubleSided = true;
   }
 
   return finalMaterial;
