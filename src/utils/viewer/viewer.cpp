@@ -47,7 +47,6 @@
 #include "esp/gfx/Drawable.h"
 #include "esp/io/io.h"
 
-#include "esp/scene/SceneConfiguration.h"
 #include "esp/sim/Simulator.h"
 
 #include "ObjectPickingHelper.h"
@@ -323,7 +322,7 @@ Viewer::Viewer(const Arguments& arguments)
 
   // configure and intialize Simulator
   auto simConfig = esp::sim::SimulatorConfiguration();
-  simConfig.scene.id = sceneFileName;
+  simConfig.activeSceneID = sceneFileName;
   simConfig.enablePhysics = useBullet;
   simConfig.frustumCulling = true;
   simConfig.requiresTextures = true;
