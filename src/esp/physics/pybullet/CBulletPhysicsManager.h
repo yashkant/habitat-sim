@@ -12,11 +12,8 @@
 /* Bullet Physics Integration */
 #include "esp/physics/PhysicsManager.h"
 
-// TODO: import BulletRobotics. Includes are not found currently. Added by
-// deps/bullet3/Extras/BulletRobotics/CMakeLists.txt. Included with
-// BUILD_EXTRAS?
-//#include <bullet_robotics/PhysicsClientC_API.h>
-//#include "bullet_robotics/PhysicsClientC_API.h"
+// must include these directly from examples
+#include "bullet3/examples/SharedMemory/PhysicsClientC_API.h"
 
 namespace esp {
 namespace physics {

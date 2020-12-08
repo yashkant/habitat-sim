@@ -2,7 +2,7 @@
 # Find Bullet
 # -----------
 #
-# Finds the Bullet libraries. This module defines:
+# Finds the Bullet libraries. By default, this module defines:
 #
 #  Bullet_FOUND         - True if Bullet is found
 #  Bullet::Dynamics     - Bullet Dynamics imported target. Depends on
@@ -13,6 +13,25 @@
 #  Bullet::SoftBody     - Bullet Soft Body imported target. Depends on
 #   Bullet::Dynamics, Bullet::Collision and Bullet::LinearMath.
 #
+# Additional libraries are optional, specify them as components in the
+# find_package() command in order to have them found:
+#
+#  3Common              - Bullet 3 common
+#  FileLoader           - File loader. Part of Bullet extras, depends on
+#   Bullet::LinearMath.
+#  InverseDynamics      - Inverse Dynamics. New since 2.83.7, depends on
+#   Bullet::3Common and Bullet::LinearMath
+#  InverseDynamicsUtils - Inverse Dynamics utils. Part of Bullet extras, new
+#   since 2.83.7. Depends on Bullet::3Common, Bullet::InverseDynamics,
+#   Bullet::Dynamics, Bullet::Collision and Bullet::LinearMath.
+#  Robotics             - Robotics. Part of Bullet extras, new since 2.87.
+#   Depends on Bullet::InverseDynamics, Bullet::InverseDynamicsUtils,
+#   Bullet::WorldImporter, Bullet::SoftBody, Bullet::Dynamics,
+#   Bullet::Collision and Bullet::LinearMath.
+#  WorldImporter        - World importer. Part of Bullet extras. Depends on
+#   Bullet::Dynamics, Bullet::Collision, Bullet::LinearMath and
+#   Bullet::FileLoader.
+#
 # Additionally these variables are defined for internal usage:
 #
 #  Bullet_Dynamics_LIBRARY_{DEBUG,RELEASE} - Bullet Dynamics library location
@@ -20,6 +39,16 @@
 #  Bullet_LinearMath_LIBRARY_{DEBUG,RELEASE} - Bullet Linear Math library
 #   location
 #  Bullet_SoftBody_LIBRARY_{DEBUG,RELEASE} - Bullet SoftBody library location
+#  Bullet_3Common_LIBRARY_{DEBUG,RELEASE} - Bullet 3Common library location
+#  Bullet_FileLoader_LIBRARY_{DEBUG,RELEASE} - Bullet FileLoader library
+#   location
+#  Bullet_InverseDynamics_LIBRARY_{DEBUG,RELEASE} - Bullet InverseDynamics
+#   library location
+#  Bullet_InverseDynamicsUtils_LIBRARY_{DEBUG,RELEASE} - Bullet
+#   InverseDynamicsUtils library location
+#  Bullet_Robotics_LIBRARY_{DEBUG,RELEASE} - Bullet Robotics library location
+#  Bullet_WorldImporter_LIBRARY_{DEBUG,RELEASE} - Bullet WorldImporter library
+#   location
 #  Bullet_INCLUDE_DIR   - Include dir
 #
 
@@ -80,6 +109,30 @@ if(TARGET BulletCollision)
             target_link_libraries(BulletCollision LinearMath)
             target_link_libraries(BulletDynamics BulletCollision)
             target_link_libraries(BulletSoftBody BulletDynamics)
+            # Bullet3Common doesn't have any dependency, interesting
+            if(TARGET BulletInverseDynamics)
+                target_link_libraries(BulletInverseDynamics
+                    Bullet3Common LinearMath)
+            endif()
+            if(TARGET BulletInverseDynamicsUtils)
+                target_link_libraries(BulletInverseDynamicsUtils
+                    BulletInverseDynamics BulletDynamics Bullet3Common)
+            endif()
+            if(TARGET BulletFileLoader)
+                target_link_libraries(BulletFileLoader
+                    LinearMath)
+            endif()
+            if(TARGET BulletWorldImporter)
+                target_link_libraries(BulletWorldImporter
+                    BulletDynamics BulletFileLoader)
+            endif()
+            if(TARGET BulletRobotics)
+                target_link_libraries(BulletRobotics
+                    BulletInverseDynamics
+                    BulletInverseDynamicsUtils
+                    BulletWorldImporter
+                    BulletSoftBody)
+            endif()
             cmake_policy(POP)
         endif()
     endif()
@@ -88,9 +141,30 @@ else()
 endif()
 
 # Bullet's math library has a special name, so it has to be handled separately.
-# Sigh. TODO: other libs such as Bullet3Common, Robotics, InverseDynamics?
-set(_BULLET_SANE_LIBRARIES Dynamics Collision SoftBody Robotics)
+# Sigh.
+set(_BULLET_SANE_LIBRARIES Dynamics Collision SoftBody)
 set(_BULLET_LIBRARIES LinearMath ${_BULLET_SANE_LIBRARIES})
+
+# Handle dependencies of the extra components. Specify the full dependency
+# chain for each so we don't have to iterate several times.
+# 3Common has nothing in addition to the core components
+if(InverseDynamics IN_LIST Bullet_FIND_COMPONENTS)
+    list(INSERT Bullet_FIND_COMPONENTS 0 3Common)
+endif()
+if(InverseDynamicsUtils IN_LIST Bullet_FIND_COMPONENTS)
+    list(INSERT Bullet_FIND_COMPONENTS InverseDynamics 3Common)
+endif()
+# FileLoader has nothing in addition to the core components
+if(WorldImporter IN_LIST Bullet_FIND_COMPONENTS)
+    list(INSERT Bullet_FIND_COMPONENTS FileLoader)
+endif()
+if(Robotics IN_LIST Bullet_FIND_COMPONENTS)
+    list(INSERT Bullet_FIND_COMPONENTS InverseDynamics InverseDynamicsUtils 3Common WorldImporter FileLoader)
+endif()
+# Remove duplicate entries
+if(Bullet_FIND_COMPONENTS)
+    list(REMOVE_DUPLICATES Bullet_FIND_COMPONENTS)
+endif()
 
 # We have a CMake subproject or a Vcpkg package, base our targets on those.
 # That's all needed, so exit right after.
@@ -134,11 +208,50 @@ if(TARGET BulletCollision)
             INTERFACE_INCLUDE_DIRECTORIES ${_BULLET_INTERFACE_INCLUDE_DIRECTORIES})
     endif()
 
+    # Extra components
+    foreach(_library ${Bullet_FIND_COMPONENTS})
+        if(TARGET Bullet${_library})
+            if(NOT TARGET Bullet::${_library})
+                # Aliases of (global) targets are only supported in CMake 3.11,
+                # so we work around it by this. This is easier than fetching
+                # all possible properties (which are impossible to track of)
+                # and then attempting to rebuild them into a new target.
+                add_library(Bullet::${_library} INTERFACE IMPORTED)
+                set_target_properties(Bullet::${_library} PROPERTIES
+                    INTERFACE_LINK_LIBRARIES Bullet${_library})
+            endif()
+            set(Bullet_${_library}_FOUND ON)
+
+            # Of course neither include dirs are specified correctly on the
+            # targets, so patch that up here again in case we have a CMake
+            # subproject (thus no BULLET_INCLUDE_DIR defined)
+            if(NOT BULLET_INCLUDE_DIR)
+                get_filename_component(_BULLET_SOURCE_DIR ${_BULLET_INTERFACE_INCLUDE_DIRECTORIES} DIRECTORY)
+
+                if(_library STREQUAL Robotics)
+                    # INSANE! src/Extras/BulletRobotics/CMakeLists.txt
+                    # TODO: are all those really needed publicly?
+                    set_property(TARGET Bullet::${_library} APPEND PROPERTY
+                        INTERFACE_INCLUDE_DIRECTORIES
+                            ${_BULLET_SOURCE_DIR}/examples
+                            ${_BULLET_SOURCE_DIR}/examples/SharedMemory
+                            ${_BULLET_SOURCE_DIR}/examples/ThirdPartyLibs
+                            ${_BULLET_SOURCE_DIR}/examples/ThirdPartyLibs/enet/include
+                            ${_BULLET_SOURCE_DIR}/examples/ThirdPartyLibs/clsocket/src)
+                endif()
+            endif()
+        else()
+            set(Bullet_${_library}_FOUND OFF)
+        endif()
+    endforeach()
+
     # Just to make FPHSA print some meaningful location, nothing else. Luckily
     # we can just reuse what we had to find above.
     include(FindPackageHandleStandardArgs)
-    find_package_handle_standard_args("Bullet" DEFAULT_MSG
-        _BULLET_INTERFACE_INCLUDE_DIRECTORIES)
+    find_package_handle_standard_args(Bullet REQUIRED_VARS
+        _BULLET_INTERFACE_INCLUDE_DIRECTORIES
+        # Make sure to check also all extras
+        HANDLE_COMPONENTS)
 
     return()
 endif()
@@ -152,7 +265,7 @@ include(SelectLibraryConfigurations)
 # just puts everything directly into lib/ and bin/. The weird path with 8 in it
 # is there unchanged since the beginning (2009) and without any comment, I'll
 # assume that's just obsolete.
-foreach(_library ${_BULLET_SANE_LIBRARIES})
+foreach(_library ${_BULLET_SANE_LIBRARIES} ${Bullet_FIND_COMPONENTS})
     find_library(Bullet_${_library}_LIBRARY_RELEASE NAMES Bullet${_library})
     find_library(Bullet_${_library}_LIBRARY_DEBUG
         NAMES
@@ -173,20 +286,31 @@ find_library(Bullet_LinearMath_LIBRARY_DEBUG
         LinearMath_d)
 select_library_configurations(Bullet_LinearMath)
 
+# Separately decide if the extra components were found. Not doing this for the
+# default libraries, as those are not listed among components.
+foreach(_library ${Bullet_FIND_COMPONENTS})
+    if(Bullet_${_library})
+        set(Bullet_${_library}_FOUND ON)
+    else()
+        set(Bullet_${_library}_FOUND OFF)
+    endif()
+endforeach()
+
 # Include dir
 find_path(Bullet_INCLUDE_DIR NAMES btBulletCollisionCommon.h
     PATH_SUFFIXES bullet)
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(Bullet DEFAULT_MSG
-    # Those are the default set searched for by vanilla FindBullet, so assume
-    # those are essential and everything else is optional(?)
+find_package_handle_standard_args(Bullet REQUIRED_VARS
+    # Those are the default, always-present set
     Bullet_Dynamics_LIBRARY
     Bullet_Collision_LIBRARY
     Bullet_LinearMath_LIBRARY
     Bullet_SoftBody_LIBRARY
+    Bullet_INCLUDE_DIR
 
-    Bullet_INCLUDE_DIR)
+    # The rest is handled via components
+    HANDLE_COMPONENTS)
 
 mark_as_advanced(FORCE Bullet_INCLUDE_DIR)
 
@@ -211,32 +335,56 @@ foreach(_library ${_BULLET_LIBRARIES})
                 IMPORTED_LOCATION_DEBUG ${Bullet_${_library}_LIBRARY_DEBUG})
         endif()
 
-        # Everything depends on LinearMath, so put the include dir there
-        if(_library STREQUAL LinearMath)
+        # 3Common doesn't depend on anything, so put the include dir there
+        if(_library STREQUAL 3Common)
             set_property(TARGET Bullet::${_library} APPEND PROPERTY
                 INTERFACE_INCLUDE_DIRECTORIES ${Bullet_INCLUDE_DIR})
 
-        # Collision depends on LinearMath
+        # Everything except 3Common depends on LinearMath, so put the include
+        # dir there as well
+        elseif(_library STREQUAL LinearMath)
+            set_property(TARGET Bullet::${_library} APPEND PROPERTY
+                INTERFACE_INCLUDE_DIRECTORIES ${Bullet_INCLUDE_DIR})
+
+        # Collision dependencies
         elseif(_library STREQUAL Collision)
             set_property(TARGET Bullet::${_library} APPEND PROPERTY
                 INTERFACE_LINK_LIBRARIES Bullet::LinearMath)
 
-        # Dynamics depends on Collision and LinearMath
+        # Dynamics dependencies
         elseif(_library STREQUAL Dynamics)
             set_property(TARGET Bullet::${_library} APPEND PROPERTY
                 INTERFACE_LINK_LIBRARIES Bullet::Collision Bullet::LinearMath)
 
-        # SoftBody depends on Dynamics, Collision and LinearMath (according to
-        # ldd at least, not sure what's the real dependency chain)
+        # SoftBody dependencies
         elseif(_library STREQUAL SoftBody)
             set_property(TARGET Bullet::${_library} APPEND PROPERTY
                 INTERFACE_LINK_LIBRARIES Bullet::Dynamics Bullet::Collision Bullet::LinearMath)
 
-        #TODO: guessing here
-        # Robotics depends on Dynamics, Collision, SoftBody and LinearMath
+        # FileLoader dependencies
+        elseif(_library STREQUAL FileLoader)
+            set_property(TARGET Bullet::${_library} APPEND PROPERTY
+                INTERFACE_LINK_LIBRARIES Bullet::LinearMath)
+
+        # InverseDynamics dependencies
+        elseif(_library STREQUAL InverseDynamics)
+            set_property(TARGET Bullet::${_library} APPEND PROPERTY
+                INTERFACE_LINK_LIBRARIES Bullet::3Common Bullet::LinearMath)
+
+        # InverseDynamicsUtils dependencies
+        elseif(_library STREQUAL InverseDynamicsUtils)
+            set_property(TARGET Bullet::${_library} APPEND PROPERTY
+                INTERFACE_LINK_LIBRARIES Bullet::3Common Bullet::InverseDynamics Bullet::Dynamics Bullet::LinearMath)
+
+        # Robotics dependencies
         elseif(_library STREQUAL Robotics)
             set_property(TARGET Bullet::${_library} APPEND PROPERTY
-                INTERFACE_LINK_LIBRARIES Bullet::Dynamics Bullet::Collision Bullet::SoftBody Bullet::LinearMath)
+                INTERFACE_LINK_LIBRARIES Bullet::InverseDynamics Bullet::InverseDynamicsUtils Bullet::WorldImporter Bullet::SoftBody Bullet::Dynamics Bullet::Collision Bullet::LinearMath)
+
+        # WorldImporter dependencies
+        elseif(_library STREQUAL WorldImporter)
+            set_property(TARGET Bullet::${_library} APPEND PROPERTY
+                INTERFACE_LINK_LIBRARIES Bullet::Dynamics Bullet::Collision Bullet::LinearMath Bullet::FileLoader)
 
         # Sanity check in case we expand the library list
         else()
