@@ -89,7 +89,7 @@ endif()
 
 # Bullet's math library has a special name, so it has to be handled separately.
 # Sigh. TODO: other libs such as Bullet3Common, Robotics, InverseDynamics?
-set(_BULLET_SANE_LIBRARIES Dynamics Collision SoftBody)
+set(_BULLET_SANE_LIBRARIES Dynamics Collision SoftBody Robotics)
 set(_BULLET_LIBRARIES LinearMath ${_BULLET_SANE_LIBRARIES})
 
 # We have a CMake subproject or a Vcpkg package, base our targets on those.
@@ -231,6 +231,12 @@ foreach(_library ${_BULLET_LIBRARIES})
         elseif(_library STREQUAL SoftBody)
             set_property(TARGET Bullet::${_library} APPEND PROPERTY
                 INTERFACE_LINK_LIBRARIES Bullet::Dynamics Bullet::Collision Bullet::LinearMath)
+
+        #TODO: guessing here
+        # Robotics depends on Dynamics, Collision, SoftBody and LinearMath
+        elseif(_library STREQUAL Robotics)
+            set_property(TARGET Bullet::${_library} APPEND PROPERTY
+                INTERFACE_LINK_LIBRARIES Bullet::Dynamics Bullet::Collision Bullet::SoftBody Bullet::LinearMath)
 
         # Sanity check in case we expand the library list
         else()

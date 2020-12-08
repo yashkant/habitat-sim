@@ -21,8 +21,10 @@ add_library(
 
 if(BUILD_WITH_BULLET)
   add_subdirectory(bullet)
+  add_subdirectory(pybullet)
 
   target_link_libraries(physics PUBLIC bulletphysics)
+  target_link_libraries(physics PUBLIC pybulletphysics)
 endif()
 
 target_link_libraries(
