@@ -95,6 +95,8 @@ void initShortestPathBindings(py::module& m) {
       .def("island_radius", &PathFinder::islandRadius, "pt"_a)
       .def_property_readonly("is_loaded", &PathFinder::isLoaded)
       .def_property_readonly("navigable_area", &PathFinder::getNavigableArea)
+      .def_property_readonly("num_islands", &PathFinder::getNumIslands)
+      .def("island_area", &PathFinder::getIslandArea, "island_ix"_a)
       .def("load_nav_mesh", &PathFinder::loadNavMesh)
       .def("save_nav_mesh", &PathFinder::saveNavMesh, "path"_a)
       .def("distance_to_closest_obstacle",

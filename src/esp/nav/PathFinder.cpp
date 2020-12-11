@@ -84,6 +84,9 @@ std::tuple<dtStatus, dtPolyRef, vec3f> projectToPoly(
 
   return std::make_tuple(status, polyRef, polyXYZ);
 }
+
+float polyArea(const dtPoly* poly, const dtMeshTile* tile);
+
 }  // namespace
 
 namespace impl {
@@ -132,6 +135,37 @@ class IslandSystem {
         }
       }
     }
+
+    // Area compute
+    // 0 init for areas
+    islandAreas_ = std::vector<float>(islandRadius_.size());
+    std::fill(islandAreas_.begin(), islandAreas_.end(), 0);
+
+    // Iterate over all tiles
+    for (int iTile = 0; iTile < navMesh->getMaxTiles(); ++iTile) {
+      const dtMeshTile* tile = navMesh->getTile(iTile);
+      if (!tile)
+        continue;
+
+      // Iterate over all polygons in a tile
+      for (int jPoly = 0; jPoly < tile->header->polyCount; ++jPoly) {
+        // Get the polygon reference from the tile and polygon id
+        dtPolyRef startRef = navMesh->encodePolyId(tile->salt, iTile, jPoly);
+        // compute the area and add to the island
+        const dtPoly* poly = nullptr;
+        const dtMeshTile* tmp = nullptr;
+        navMesh->getTileAndPolyByRefUnsafe(startRef, &tmp, &poly);
+
+        CORRADE_INTERNAL_ASSERT(poly != nullptr);
+        CORRADE_INTERNAL_ASSERT(tmp != nullptr);
+
+        float polygonArea = polyArea(poly, tile);
+
+        if (polygonArea > 1e-5) {
+          islandAreas_[polyToIsland_.at(startRef)] += polygonArea;
+        }
+      }
+    }
   }
 
   inline bool hasConnection(dtPolyRef startRef, dtPolyRef endRef) const {
@@ -155,6 +189,8 @@ class IslandSystem {
 
     return islandRadius_[itRef->second];
   }
+
+  std::vector<float> islandAreas_;
 
  private:
   std::unordered_map<dtPolyRef, uint32_t> polyToIsland_;
@@ -244,6 +280,14 @@ struct PathFinder::Impl {
 
   float getNavigableArea() const { return navMeshArea_; };
 
+  int getNumIslands() const {
+    return islandSystem_ == nullptr ? 0 : islandSystem_->islandAreas_.size();
+  };
+
+  float getIslandArea(int islandIx) const {
+    return islandSystem_->islandAreas_[islandIx];
+  };
+
   void seed(uint32_t newSeed);
 
   float islandRadius(const vec3f& pt) const;
@@ -284,6 +328,9 @@ struct PathFinder::Impl {
   //! Sum of all NavMesh polygons. Computed on NavMesh load/recompute. See
   //! removeZeroAreaPolys.
   float navMeshArea_ = 0;
+
+  //! total area of each NavMesh island
+  std::vector<float> islandAreas_;
 
   std::pair<vec3f, vec3f> bounds_;
 
@@ -762,6 +809,7 @@ float polyArea(const dtPoly* poly, const dtMeshTile* tile) {
 // Also compute the total NavMesh area for later query.
 void PathFinder::Impl::removeZeroAreaPolys() {
   navMeshArea_ = 0;
+
   // Iterate over all tiles
   for (int iTile = 0; iTile < navMesh_->getMaxTiles(); ++iTile) {
     const dtMeshTile* tile =
@@ -1405,6 +1453,13 @@ bool PathFinder::isNavigable(const vec3f& pt, const float maxYDelta) const {
 
 float PathFinder::getNavigableArea() const {
   return pimpl_->getNavigableArea();
+}
+float PathFinder::getIslandArea(int islandIx) const {
+  return pimpl_->getIslandArea(islandIx);
+}
+
+int PathFinder::getNumIslands() const {
+  return pimpl_->getNumIslands();
 }
 
 std::pair<vec3f, vec3f> PathFinder::bounds() const {

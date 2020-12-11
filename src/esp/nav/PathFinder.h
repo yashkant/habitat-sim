@@ -329,6 +329,12 @@ class PathFinder {
    */
   float getNavigableArea() const;
 
+  //! Get the number of navmesh islands
+  int getNumIslands() const;
+
+  //! Get the area of a specific island
+  float getIslandArea(int islandIx) const;
+
   /**
    * @return The axis aligned bounding box containing the navigation mesh.
    */

@@ -424,6 +424,7 @@ Viewer::Viewer(const Arguments& arguments)
     }
   } else if (args.isSet("recompute-navmesh")) {
     esp::nav::NavMeshSettings navMeshSettings;
+    navMeshSettings.agentHeight = 1.3;
     simulator_->recomputeNavMesh(*simulator_->getPathFinder().get(),
                                  navMeshSettings, true);
   } else if (!args.value("navmesh-file").empty()) {
@@ -868,30 +869,47 @@ void Viewer::mouseScrollEvent(MouseScrollEvent& event) {
   if (!event.offset().y()) {
     return;
   }
+
   // Use shift for fine-grained zooming
-  float modVal = (event.modifiers() & MouseEvent::Modifier::Shift) ? 1.01 : 1.1;
-  float mod = event.offset().y() > 0 ? modVal : 1.0 / modVal;
-  auto& cam = getAgentCamera();
-  cam.modZoom(mod);
+  // old zoom
+  // float modVal = (event.modifiers() & MouseEvent::Modifier::Shift) ? 1.01
+  // : 1.1; float mod = event.offset().y() > 0 ? modVal : 1.0 / modVal; auto&
+  // cam = getAgentCamera(); cam.modZoom(mod);
+
+  // move agent
+  agentBodyNode_->setTranslation(
+      agentBodyNode_->translation() +
+      agentBodyNode_->transformation().transformVector({0, 0, -1}) *
+          event.offset().y() * 0.1);
+
   redraw();
 
   event.setAccepted();
 }  // Viewer::mouseScrollEvent
 
 void Viewer::mouseMoveEvent(MouseMoveEvent& event) {
-  if (!(event.buttons() & MouseMoveEvent::Button::Left)) {
-    return;
-  }
-
   const Mn::Vector2i delta = event.relativePosition();
-  auto& controls = *defaultAgent_->getControls().get();
-  controls(*agentBodyNode_, "turnRight", delta.x());
-  // apply the transformation to all sensors
-  for (auto p : defaultAgent_->getSensorSuite().getSensors()) {
-    controls(p.second->object(),  // SceneNode
-             "lookDown",          // action name
-             delta.y(),           // amount
-             false);              // applyFilter
+
+  if ((event.buttons() & MouseMoveEvent::Button::Left)) {
+    auto& controls = *defaultAgent_->getControls().get();
+    controls(*agentBodyNode_, "turnRight", delta.x());
+    // apply the transformation to all sensors
+    for (auto p : defaultAgent_->getSensorSuite().getSensors()) {
+      controls(p.second->object(),  // SceneNode
+               "lookDown",          // action name
+               delta.y(),           // amount
+               false);              // applyFilter
+    }
+  } else if ((event.buttons() & MouseMoveEvent::Button::Right)) {
+    agentBodyNode_->setTranslation(
+        agentBodyNode_->translation() +
+        agentBodyNode_->transformation().transformVector({-1, 0, 0}) *
+            delta[0] * 0.01);
+    agentBodyNode_->setTranslation(
+        agentBodyNode_->translation() +
+        agentBodyNode_->transformation().transformVector({0, 1, 0}) * delta[1] *
+            0.01);
+    // agentBodyNode_->translateLocal({float(delta[0]*0.01),float(delta[1]*0.01),0});
   }
 
   redraw();
