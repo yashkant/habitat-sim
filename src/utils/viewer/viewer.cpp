@@ -135,6 +135,8 @@ class Viewer : public Mn::Platform::Application {
   std::string viewerStartTimeString = getCurrentTimeString();
   void screenshot();
 
+  void createNavMeshObjectVisualizer();
+
   esp::sensor::CameraSensor& getAgentCamera() {
     esp::sensor::Sensor& cameraSensor =
         *defaultAgent_->getSensorSuite().getSensors()["rgba_camera"];
@@ -800,6 +802,13 @@ void Viewer::createPickedObjectVisualizer(unsigned int objectId) {
   }
 }
 
+void Viewer::createNavMeshObjectVisualizer() {
+  if (simulator_->isNavMeshVisualizationActive()) {
+    objectPickingHelper_->createPickedObjectVisualizer(
+        simulator_->getNavMeshDrawable());
+  }
+}
+
 void Viewer::mousePressEvent(MouseEvent& event) {
   if (event.button() == MouseEvent::Button::Right &&
       (event.modifiers() & MouseEvent::Modifier::Shift)) {
@@ -892,7 +901,10 @@ void Viewer::mouseMoveEvent(MouseMoveEvent& event) {
 
   if ((event.buttons() & MouseMoveEvent::Button::Left)) {
     auto& controls = *defaultAgent_->getControls().get();
-    controls(*agentBodyNode_, "turnRight", delta.x());
+    // controls(*agentBodyNode_, "turnRight", delta.x());
+    agentBodyNode_->setRotation(
+        Mn::Quaternion::rotation(Mn::Deg(-delta.x()), {0, 1, 0}) *
+        agentBodyNode_->rotation());
     // apply the transformation to all sensors
     for (auto p : defaultAgent_->getSensorSuite().getSensors()) {
       controls(p.second->object(),  // SceneNode
@@ -1037,8 +1049,15 @@ void Viewer::keyPressEvent(KeyEvent& event) {
       break;
     case KeyEvent::Key::N:
       // toggle navmesh visualization
+      if (simulator_->isNavMeshVisualizationActive()) {
+        objectPickingHelper_->createPickedObjectVisualizer(nullptr);
+      }
       simulator_->setNavMeshVisualization(
           !simulator_->isNavMeshVisualizationActive());
+      if (simulator_->isNavMeshVisualizationActive()) {
+        createNavMeshObjectVisualizer();
+      }
+
       break;
     case KeyEvent::Key::O:
       addTemplateObject();

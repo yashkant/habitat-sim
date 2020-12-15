@@ -631,6 +631,18 @@ class Simulator {
    */
   bool isNavMeshVisualizationActive();
 
+  esp::gfx::Drawable* getNavMeshDrawable() {
+    if (navMeshVisNode_ != nullptr) {
+      for (auto& abstractFeature : navMeshVisNode_->features()) {
+        auto feature = dynamic_cast<esp::gfx::Drawable*>(&abstractFeature);
+        if (feature) {
+          return feature;
+        }
+      }
+    }
+    return nullptr;
+  }
+
   /**
    * @brief Compute a trajectory visualization for the passed points.
    * @param trajVisName The name to use for the trajectory visualization

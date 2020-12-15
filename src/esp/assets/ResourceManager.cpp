@@ -1386,11 +1386,25 @@ int ResourceManager::loadNavMeshVisualization(esp::nav::PathFinder& pathFinder,
   }
 
   // create a temporary mesh object referencing the above data
+  /*
   Mn::Trade::MeshData visualNavMesh{
       Mn::MeshPrimitive::Lines,
       {},
       indices,
       Mn::Trade::MeshIndexData{indices},
+      {},
+      positions,
+      {Mn::Trade::MeshAttributeData{Mn::Trade::MeshAttribute::Position,
+                                    Cr::Containers::arrayView(positions)}}};
+  */
+
+  // create a temporary mesh object referencing the above data
+  // TODO: The new one
+  Mn::Trade::MeshData visualNavMesh{
+      Mn::MeshPrimitive::Triangles,
+      {},
+      navMeshData->ibo,
+      Mn::Trade::MeshIndexData{navMeshData->ibo},
       {},
       positions,
       {Mn::Trade::MeshAttributeData{Mn::Trade::MeshAttribute::Position,
