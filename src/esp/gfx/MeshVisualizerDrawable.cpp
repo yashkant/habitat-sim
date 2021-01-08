@@ -20,9 +20,13 @@ MeshVisualizerDrawable::MeshVisualizerDrawable(
 
 void MeshVisualizerDrawable::draw(const Magnum::Matrix4& transformationMatrix,
                                   Magnum::SceneGraph::Camera3D& camera) {
+  Cr::Utility::Debug{} << "drawing MeshVisualizerDrawable";
+
+  Mn::GL::Renderer::enable(Mn::GL::Renderer::Feature::Blending);
   Mn::GL::Renderer::enable(Mn::GL::Renderer::Feature::PolygonOffsetFill);
   Mn::GL::Renderer::setPolygonOffset(-5.0f, -5.0f);
 
+  shader_.setViewportSize(Mn::Vector2{camera.viewport()});
   shader_.setProjectionMatrix(camera.projectionMatrix())
       .setTransformationMatrix(transformationMatrix);
 
@@ -30,6 +34,7 @@ void MeshVisualizerDrawable::draw(const Magnum::Matrix4& transformationMatrix,
 
   Mn::GL::Renderer::setPolygonOffset(0.0f, 0.0f);
   Mn::GL::Renderer::disable(Mn::GL::Renderer::Feature::PolygonOffsetFill);
+  Mn::GL::Renderer::disable(Mn::GL::Renderer::Feature::Blending);
 }
 }  // namespace gfx
 }  // namespace esp

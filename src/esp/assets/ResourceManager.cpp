@@ -38,6 +38,7 @@
 #include "esp/geo/geo.h"
 #include "esp/gfx/GenericDrawable.h"
 #include "esp/gfx/MaterialUtil.h"
+#include "esp/gfx/MeshVisualizerDrawable.h"
 #include "esp/gfx/PbrDrawable.h"
 #include "esp/gfx/replay/Recorder.h"
 #include "esp/io/io.h"
@@ -64,6 +65,8 @@
 
 namespace Cr = Corrade;
 namespace Mn = Magnum;
+using Mn::Math::Literals::operator""_rgbf;
+using Mn::Math::Literals::operator""_rgbaf;
 
 namespace esp {
 using metadata::attributes::AbstractObjectAttributes;
@@ -1379,10 +1382,10 @@ int ResourceManager::loadNavMeshVisualization(esp::nav::PathFinder& pathFinder,
 
   // create a temporary mesh object referencing the above data
   Mn::Trade::MeshData visualNavMesh{
-      Mn::MeshPrimitive::Lines,
+      Mn::MeshPrimitive::Triangles,
       {},
-      indices,
-      Mn::Trade::MeshIndexData{indices},
+      navMeshData->ibo,
+      Mn::Trade::MeshIndexData{navMeshData->ibo},
       {},
       positions,
       {Mn::Trade::MeshAttributeData{Mn::Trade::MeshAttribute::Position,
@@ -1396,7 +1399,33 @@ int ResourceManager::loadNavMeshVisualization(esp::nav::PathFinder& pathFinder,
   if (parent != nullptr && drawables != nullptr &&
       navMeshPrimitiveID != ID_UNDEFINED) {
     // create the drawable
-    addPrimitiveToDrawables(navMeshPrimitiveID, *parent, drawables);
+    // addPrimitiveToDrawables(navMeshPrimitiveID, *parent, drawables);
+
+    // create the new shader if necessary
+    auto shader_ = shaderManager_.get<Mn::GL::AbstractShaderProgram,
+                                      Magnum::Shaders::MeshVisualizer3D>(
+        "mesh_visualizer_shader");
+    // if no shader with desired number of lights and flags exists, create one
+    if (!shader_) {
+      shaderManager_.set<Mn::GL::AbstractShaderProgram>(
+          "mesh_visualizer_shader",
+          new Magnum::Shaders::MeshVisualizer3D{
+              Magnum::Shaders::MeshVisualizer3D::Flag::Wireframe},
+          Mn::ResourceDataState::Final, Mn::ResourcePolicy::ReferenceCounted);
+      auto shader_ = shaderManager_.get<Mn::GL::AbstractShaderProgram,
+                                        Magnum::Shaders::MeshVisualizer3D>(
+          "mesh_visualizer_shader");
+      // shader_->setViewportSize(Mn::Vector2{viewportSize});
+      shader_->setColor(0x2f83cc7f_rgbaf)
+          .setWireframeColor(0xdcdcdc_rgbf)
+          .setWireframeWidth(2.0);
+    }
+
+    auto meshVisualizerDrawable_ = new esp::gfx::MeshVisualizerDrawable(
+        *parent, *(shader_.operator Magnum::Shaders::MeshVisualizer3D*()),
+        *primitive_meshes_[navMeshPrimitiveID].get(), drawables);
+    Mn::Debug() << "created " << meshVisualizerDrawable_ << " attached to "
+                << parent;
   }
 
   return navMeshPrimitiveID;
