@@ -5,11 +5,14 @@
 #ifndef ESP_SIM_SIMULATORCONFIGURATION_H_
 #define ESP_SIM_SIMULATORCONFIGURATION_H_
 
-#include "esp/metadata/MetadataMediator.h"
+#include <string>
+
+#include "esp/core/esp.h"
+#include "esp/physics/configure.h"
 
 namespace esp {
-namespace sim {
 
+namespace sim {
 struct SimulatorConfiguration {
   /**
    * @brief Name of scene or stage config or asset to load
@@ -30,6 +33,10 @@ struct SimulatorConfiguration {
    * simulation, if a suitable library (i.e. Bullet) has been installed.
    */
   bool enablePhysics = false;
+  /**
+   * @brief todo
+   */
+  bool enableGfxReplaySave = false;
   /**
    * @brief Whether or not to load the semantic mesh
    */
@@ -53,7 +60,7 @@ struct SimulatorConfiguration {
    */
   std::string sceneDatasetConfigFile = "default";
   /** @brief Light setup key for scene */
-  std::string sceneLightSetup = metadata::MetadataMediator::NO_LIGHT_KEY;
+  std::string sceneLightSetup = esp::NO_LIGHT_KEY;
 
   ESP_SMART_POINTERS(SimulatorConfiguration)
 };

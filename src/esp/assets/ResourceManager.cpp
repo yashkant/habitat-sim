@@ -39,6 +39,7 @@
 #include "esp/gfx/GenericDrawable.h"
 #include "esp/gfx/MaterialUtil.h"
 #include "esp/gfx/PbrDrawable.h"
+#include "esp/gfx/replay/Recorder.h"
 #include "esp/io/io.h"
 #include "esp/io/json.h"
 #include "esp/physics/PhysicsManager.h"
@@ -205,8 +206,7 @@ bool ResourceManager::loadStage(
         flags |= RenderAssetInstanceCreationInfo::Flag::IsStatic;
       }
       RenderAssetInstanceCreationInfo creation(
-          semanticStageFilename, Cr::Containers::NullOpt, flags,
-          metadata::MetadataMediator::NO_LIGHT_KEY);
+          semanticStageFilename, Cr::Containers::NullOpt, flags, NO_LIGHT_KEY);
 
       bool semanticStageSuccess =
           loadStageInternal(semanticInfo,  // AssetInfo
@@ -317,7 +317,6 @@ bool ResourceManager::loadStage(
 
   return true;
 }  // ResourceManager::loadScene
-
 bool ResourceManager::buildMeshGroups(
     const AssetInfo& info,
     std::vector<CollisionMeshData>& meshGroup) {
@@ -502,11 +501,9 @@ bool ResourceManager::loadRenderAsset(const AssetInfo& info) {
     // loadRenderAsset doesn't yet support the requested asset type
     CORRADE_INTERNAL_ASSERT_UNREACHABLE();
   }
-#if 0  // coming soon
-  if (renderKeyframeWriter_) {
-    renderKeyframeWriter_->onLoadRenderAsset(info);
+  if (gfxReplayRecorder_) {
+    gfxReplayRecorder_->onLoadRenderAsset(info);
   }
-#endif
   return meshSuccess;
 }
 
@@ -548,11 +545,10 @@ scene::SceneNode* ResourceManager::createRenderAssetInstance(
     CORRADE_INTERNAL_ASSERT_UNREACHABLE();
   }
 
-#if 0  // coming soon
-  if (renderKeyframeWriter_ && newNode) {
-    renderKeyframeWriter_->onCreateRenderAssetInstance(&newNode, creation);
+  if (gfxReplayRecorder_ && newNode) {
+    gfxReplayRecorder_->onCreateRenderAssetInstance(newNode, creation);
   }
-#endif
+
   return newNode;
 }
 
@@ -936,10 +932,9 @@ scene::SceneNode* ResourceManager::createRenderAssetInstancePTex(
     scene::SceneNode* parent,
     DrawableGroup* drawables) {
 #ifdef ESP_BUILD_PTEX_SUPPORT
-  ASSERT(!creation.scale);  // PTex doesn't support scale
-  ASSERT(creation.lightSetupKey ==
-         metadata::MetadataMediator::NO_LIGHT_KEY);  // PTex doesn't support
-                                                     // lighting
+  ASSERT(!creation.scale);                         // PTex doesn't support scale
+  ASSERT(creation.lightSetupKey == NO_LIGHT_KEY);  // PTex doesn't support
+                                                   // lighting
 
   const std::string& filename = creation.filepath;
   const LoadedAssetData& loadedAssetData = resourceDict_.at(creation.filepath);
@@ -1034,9 +1029,8 @@ scene::SceneNode* ResourceManager::createRenderAssetInstanceIMesh(
     scene::SceneNode* parent,
     DrawableGroup* drawables) {
   ASSERT(!creation.scale);  // IMesh doesn't support scale
-  ASSERT(creation.lightSetupKey ==
-         metadata::MetadataMediator::NO_LIGHT_KEY);  // IMesh doesn't support
-                                                     // lighting
+  ASSERT(creation.lightSetupKey == NO_LIGHT_KEY);  // IMesh doesn't support
+                                                   // lighting
 
   const bool computeAbsoluteAABBs = creation.isStatic();
 
@@ -1060,13 +1054,11 @@ scene::SceneNode* ResourceManager::createRenderAssetInstanceIMesh(
     // meshes_.at(iMesh)->getMeshData()->hasAttribute(Mn::Trade::MeshAttribute::Tangent)
     // It will SEGFAULT!
     createDrawable(*(meshes_.at(iMesh)->getMagnumGLMesh()),  // render mesh
-                   meshAttributeFlags,      // mesh attribute flags
-                   node,                    // scene node
-                   creation.lightSetupKey,  // lightSetup key
-                   metadata::MetadataMediator::
-                       PER_VERTEX_OBJECT_ID_MATERIAL_KEY,  // material
-                                                           // key
-                   drawables);                             // drawable group
+                   meshAttributeFlags,                 // mesh attribute flags
+                   node,                               // scene node
+                   creation.lightSetupKey,             // lightSetup key
+                   PER_VERTEX_OBJECT_ID_MATERIAL_KEY,  // material key
+                   drawables);                         // drawable group
 
     if (computeAbsoluteAABBs) {
       staticDrawableInfo.emplace_back(StaticDrawableInfo{node, iMesh});
@@ -1564,33 +1556,24 @@ gfx::PbrMaterialData::uptr ResourceManager::buildPbrShadedMaterialData(
   finalMaterial->textureMatrix = material.commonTextureMatrix();
 
   // base color (albedo)
-  if (material.hasAttribute(Mn::Trade::MaterialAttribute::BaseColor)) {
-    finalMaterial->baseColor = material.baseColor();
-  }
+  finalMaterial->baseColor = material.baseColor();
   if (material.hasAttribute(Mn::Trade::MaterialAttribute::BaseColorTexture)) {
     finalMaterial->baseColorTexture =
         textures_.at(textureBaseIndex + material.baseColorTexture()).get();
-    if (!material.hasAttribute(Mn::Trade::MaterialAttribute::BaseColor)) {
-      finalMaterial->baseColor = Mn::Vector4{1.0f};
-    }
   }
 
   // normal map
-  if (material.hasAttribute(Mn::Trade::MaterialAttribute::NormalTextureScale)) {
-    finalMaterial->normalTextureScale = material.normalTextureScale();
-  }
-
   if (material.hasAttribute(Mn::Trade::MaterialAttribute::NormalTexture)) {
+    // must be inside the if clause otherwise assertion fails if no normal
+    // texture is presented
+    finalMaterial->normalTextureScale = material.normalTextureScale();
+
     finalMaterial->normalTexture =
         textures_.at(textureBaseIndex + material.normalTexture()).get();
-    // if normal texture scale is not presented, use the default value in the
-    // finalMaterial
   }
 
   // emission
-  if (material.hasAttribute(Mn::Trade::MaterialAttribute::EmissiveColor)) {
-    finalMaterial->emissiveColor = material.emissiveColor();
-  }
+  finalMaterial->emissiveColor = material.emissiveColor();
   if (material.hasAttribute(Mn::Trade::MaterialAttribute::EmissiveTexture)) {
     finalMaterial->emissiveTexture =
         textures_.at(textureBaseIndex + material.emissiveTexture()).get();
@@ -1599,55 +1582,54 @@ gfx::PbrMaterialData::uptr ResourceManager::buildPbrShadedMaterialData(
     }
   }
 
-  // CAREFUL:
-  // certain texture will be stored "multiple times" in the `finalMaterial`;
-  // (e.g., roughnessTexture will be stored in noneRoughnessMetallicTexture,
-  // roughnessTexture, metallicTexture)
-  // It is OK! No worries! Such duplication (or "conflicts") will be handled in
-  // the PbrShader (see PbrMaterialData for more details)
-
   // roughness
-  if (material.hasAttribute(Mn::Trade::MaterialAttribute::Roughness)) {
-    finalMaterial->roughness = material.roughness();
-  }
+  finalMaterial->roughness = material.roughness();
   if (material.hasRoughnessTexture()) {
     finalMaterial->roughnessTexture =
         textures_.at(textureBaseIndex + material.roughnessTexture()).get();
-    if (!material.hasAttribute(Mn::Trade::MaterialAttribute::Roughness)) {
-      finalMaterial->roughness = 1.0f;
-    }
   }
 
-  // metalness
-  if (material.hasAttribute(Mn::Trade::MaterialAttribute::Metalness)) {
-    finalMaterial->metallic = material.metalness();
-  }
+  // metallic
+  finalMaterial->metallic = material.metalness();
   if (material.hasMetalnessTexture()) {
     finalMaterial->metallicTexture =
         textures_.at(textureBaseIndex + material.metalnessTexture()).get();
-    if (!material.hasAttribute(Mn::Trade::MaterialAttribute::Metalness)) {
-      finalMaterial->metallic = 1.0f;
-    }
   }
 
-  // packed textures
-  if (material.hasOcclusionRoughnessMetallicTexture()) {
-    // occlusionTexture, roughnessTexture, metalnessTexture are pointing to the
-    // same texture ID, so just occlusionTexture
-    finalMaterial->occlusionRoughnessMetallicTexture =
-        textures_.at(textureBaseIndex + material.occlusionTexture()).get();
+  // sanity check when both metallic and roughness materials are presented
+  if (material.hasMetalnessTexture() && material.hasRoughnessTexture()) {
+    /*
+       sanity check using hasNoneRoughnessMetallicTexture() to ensure that:
+        - both use the same texture coordinate attribute,
+        - both have the same texture transformation, and
+        - the metalness is in B and roughness is in G
+
+       It checks for a subset of hasOcclusionRoughnessMetallicTexture(),
+       so hasOcclusionRoughnessMetallicTexture() is not needed here.
+
+       The normal/roughness/metallic is a totally different packing (in BA
+       instead of GB), and it is NOT supported in the current version.
+       so hasNormalRoughnessMetallicTexture() is not needed here.
+
+    */
+    CORRADE_ASSERT(
+        material.hasNoneRoughnessMetallicTexture(),
+        "ResourceManager::buildPbrShadedMaterialData(): if both the metallic "
+        "and roughness texture exist, they must be packed in the same texture "
+        "based on glTF 2.0 Spec.",
+        finalMaterial);
   }
 
-  if (material.hasNoneRoughnessMetallicTexture()) {
-    // roughnessTexture, metalnessTexture are pointing to the
-    // same texture ID, so just roughnessTexture
-    finalMaterial->noneRoughnessMetallicTexture =
-        textures_.at(textureBaseIndex + material.roughnessTexture()).get();
-  }
+  // TODO:
+  // Support NormalRoughnessMetallicTexture packing
+  CORRADE_ASSERT(!material.hasNormalRoughnessMetallicTexture(),
+                 "ResourceManager::buildPbrShadedMaterialData(): "
+                 "Sorry. NormalRoughnessMetallicTexture is not supported in "
+                 "the current version. We will work on it.",
+                 finalMaterial);
 
-  if (material.isDoubleSided()) {
-    finalMaterial->doubleSided = true;
-  }
+  // double-sided
+  finalMaterial->doubleSided = material.isDoubleSided();
 
   return finalMaterial;
 }
@@ -1884,17 +1866,13 @@ bool ResourceManager::instantiateAssetsOnDemand(
 }  // ResourceManager::instantiateAssetsOnDemand
 
 void ResourceManager::addObjectToDrawables(
-    const std::string& objTemplateHandle,
+    const ObjectAttributes::ptr& ObjectAttributes,
     scene::SceneNode* parent,
     DrawableGroup* drawables,
     std::vector<scene::SceneNode*>& visNodeCache,
     const std::string& lightSetupKey) {
   if (parent != nullptr and drawables != nullptr) {
     //! Add mesh to rendering stack
-
-    // Meta data
-    ObjectAttributes::ptr ObjectAttributes =
-        getObjectAttributesManager()->getObjectByHandle(objTemplateHandle);
 
     const std::string& renderObjectName =
         ObjectAttributes->getRenderAssetHandle();
@@ -1936,7 +1914,7 @@ void ResourceManager::addComponent(
     Mn::ResourceKey materialKey;
     if (materialIDLocal == ID_UNDEFINED ||
         metaData.materialIndex.second == ID_UNDEFINED) {
-      materialKey = metadata::MetadataMediator::DEFAULT_MATERIAL_KEY;
+      materialKey = DEFAULT_MATERIAL_KEY;
     } else {
       materialKey =
           std::to_string(metaData.materialIndex.first + materialIDLocal);
@@ -1991,13 +1969,12 @@ void ResourceManager::addPrimitiveToDrawables(int primitiveID,
   // so do not need to worry about the tangent or bitangent.
   // it might be changed in the future.
   gfx::Drawable::Flags meshAttributeFlags{};
-  createDrawable(
-      *primitive_meshes_.at(primitiveID),              // render mesh
-      meshAttributeFlags,                              // meshAttributeFlags
-      node,                                            // scene node
-      metadata::MetadataMediator::NO_LIGHT_KEY,        // lightSetup key
-      metadata::MetadataMediator::WHITE_MATERIAL_KEY,  // material key
-      drawables);                                      // drawable group
+  createDrawable(*primitive_meshes_.at(primitiveID),  // render mesh
+                 meshAttributeFlags,                  // meshAttributeFlags
+                 node,                                // scene node
+                 NO_LIGHT_KEY,                        // lightSetup key
+                 WHITE_MATERIAL_KEY,                  // material key
+                 drawables);                          // drawable group
 }
 
 void ResourceManager::removePrimitiveMesh(int primitiveID) {
@@ -2083,8 +2060,7 @@ bool ResourceManager::loadSUNCGHouseFile(const AssetInfo& houseInfo,
           flags |= RenderAssetInstanceCreationInfo::Flag::IsRGBD;
           flags |= RenderAssetInstanceCreationInfo::Flag::IsSemantic;
           RenderAssetInstanceCreationInfo objectCreation(
-              info.filepath, Cr::Containers::NullOpt, flags,
-              metadata::MetadataMediator::NO_LIGHT_KEY);
+              info.filepath, Cr::Containers::NullOpt, flags, NO_LIGHT_KEY);
           createRenderAssetInstance(objectCreation, &objectNode, drawables);
         }
         return objectNode;
@@ -2140,26 +2116,22 @@ bool ResourceManager::loadSUNCGHouseFile(const AssetInfo& houseInfo,
   return true;
 }
 void ResourceManager::initDefaultLightSetups() {
-  shaderManager_.set(metadata::MetadataMediator::NO_LIGHT_KEY,
-                     gfx::LightSetup{});
+  shaderManager_.set(NO_LIGHT_KEY, gfx::LightSetup{});
   shaderManager_.setFallback(gfx::LightSetup{});
 }
 
 void ResourceManager::initDefaultMaterials() {
-  shaderManager_.set<gfx::MaterialData>(
-      metadata::MetadataMediator::DEFAULT_MATERIAL_KEY,
-      new gfx::PhongMaterialData{});
+  shaderManager_.set<gfx::MaterialData>(DEFAULT_MATERIAL_KEY,
+                                        new gfx::PhongMaterialData{});
   auto whiteMaterialData = new gfx::PhongMaterialData;
   whiteMaterialData->ambientColor = Magnum::Color4{1.0};
-  shaderManager_.set<gfx::MaterialData>(
-      metadata::MetadataMediator::WHITE_MATERIAL_KEY, whiteMaterialData);
+  shaderManager_.set<gfx::MaterialData>(WHITE_MATERIAL_KEY, whiteMaterialData);
   auto perVertexObjectId = new gfx::PhongMaterialData{};
   perVertexObjectId->perVertexObjectId = true;
   perVertexObjectId->vertexColored = true;
   perVertexObjectId->ambientColor = Mn::Color4{1.0};
-  shaderManager_.set<gfx::MaterialData>(
-      metadata::MetadataMediator::PER_VERTEX_OBJECT_ID_MATERIAL_KEY,
-      perVertexObjectId);
+  shaderManager_.set<gfx::MaterialData>(PER_VERTEX_OBJECT_ID_MATERIAL_KEY,
+                                        perVertexObjectId);
   shaderManager_.setFallback<gfx::MaterialData>(new gfx::PhongMaterialData{});
 }
 
@@ -2168,8 +2140,7 @@ bool ResourceManager::isLightSetupCompatible(
     const Magnum::ResourceKey& lightSetupKey) const {
   // if light setup has lights in it, but asset was loaded in as flat shaded,
   // there may be an error when rendering.
-  return lightSetupKey ==
-             Mn::ResourceKey{metadata::MetadataMediator::NO_LIGHT_KEY} ||
+  return lightSetupKey == Mn::ResourceKey{NO_LIGHT_KEY} ||
          loadedAssetData.assetInfo.requiresLighting;
 }
 

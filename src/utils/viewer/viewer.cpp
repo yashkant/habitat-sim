@@ -398,8 +398,7 @@ Viewer::Viewer(const Arguments& arguments)
   simConfig.requiresTextures = true;
   if (args.isSet("stage-requires-lighting")) {
     Mn::Debug{} << "Stage using DEFAULT_LIGHTING_KEY";
-    simConfig.sceneLightSetup =
-        esp::metadata::MetadataMediator::DEFAULT_LIGHTING_KEY;
+    simConfig.sceneLightSetup = esp::DEFAULT_LIGHTING_KEY;
   }
 
   // setup the PhysicsManager config file
@@ -934,7 +933,12 @@ void Viewer::keyPressEvent(KeyEvent& event) {
   const auto key = event.key();
   switch (key) {
     case KeyEvent::Key::Esc:
-      std::exit(0);
+      /* Using Application::exit(), which exits at the next iteration of the
+         event loop (same as the window close button would do). Using
+         std::exit() would exit immediately, but without calling any scoped
+         destructors, which could hide potential destruction order issues or
+         crashes at exit. We don't want that. */
+      exit(0);
       break;
     case KeyEvent::Key::Space:
       simulating_ = !simulating_;

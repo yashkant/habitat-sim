@@ -13,6 +13,7 @@
 
 #include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/Renderer.h"
+#include "esp/gfx/replay/ReplayManager.h"
 #include "esp/scene/SemanticScene.h"
 #include "esp/sim/Simulator.h"
 #include "esp/sim/SimulatorConfiguration.h"
@@ -39,6 +40,10 @@ void initSimBindings(py::module& m) {
       .def_readwrite("create_renderer", &SimulatorConfiguration::createRenderer)
       .def_readwrite("frustum_culling", &SimulatorConfiguration::frustumCulling)
       .def_readwrite("enable_physics", &SimulatorConfiguration::enablePhysics)
+      .def_readwrite(
+          "enable_gfx_replay_save",
+          &SimulatorConfiguration::enableGfxReplaySave,
+          R"(Enable replay recording. See sim.gfx_replay.save_keyframe.)")
       .def_readwrite("physics_config_file",
                      &SimulatorConfiguration::physicsConfigFile)
       .def_readwrite("scene_light_setup",
@@ -72,6 +77,9 @@ void initSimBindings(py::module& m) {
             Not available for all datasets
             )")
       .def_property_readonly("renderer", &Simulator::getRenderer)
+      .def_property_readonly(
+          "gfx_replay_manager", &Simulator::getGfxReplayManager,
+          R"(Use gfx_replay_manager for replay recording and playback.)")
       .def("seed", &Simulator::seed, "new_seed"_a)
       .def("reconfigure", &Simulator::reconfigure, "configuration"_a)
       .def("reset", &Simulator::reset)
@@ -125,16 +133,12 @@ void initSimBindings(py::module& m) {
       .def(
           "add_object", &Simulator::addObject, "object_lib_id"_a,
           "attachment_node"_a = nullptr,
-          "light_setup_key"_a =
-              metadata::MetadataMediator::DEFAULT_LIGHTING_KEY,
-          "scene_id"_a = 0,
+          "light_setup_key"_a = DEFAULT_LIGHTING_KEY, "scene_id"_a = 0,
           R"(Instance an object into the scene via a template referenced by library id. Optionally attach the object to an existing SceneNode and assign its initial LightSetup key.)")
       .def(
           "add_object_by_handle", &Simulator::addObjectByHandle,
           "object_lib_handle"_a, "attachment_node"_a = nullptr,
-          "light_setup_key"_a =
-              metadata::MetadataMediator::DEFAULT_LIGHTING_KEY,
-          "scene_id"_a = 0,
+          "light_setup_key"_a = DEFAULT_LIGHTING_KEY, "scene_id"_a = 0,
           R"(Instance an object into the scene via a template referenced by its handle. Optionally attach the object to an existing SceneNode and assign its initial LightSetup key.)")
       .def("remove_object", &Simulator::removeObject, "object_id"_a,
            "delete_object_node"_a = true, "delete_visual_node"_a = true,
@@ -280,11 +284,11 @@ void initSimBindings(py::module& m) {
               smooth : (Bool) whether or not to smooth trajectory using a Catmull-Rom spline interpolating spline.
               num_interpolations : (Integer) the number of interpolation points to find between successive key points.)")
       .def("get_light_setup", &Simulator::getLightSetup,
-           "key"_a = metadata::MetadataMediator::DEFAULT_LIGHTING_KEY,
+           "key"_a = DEFAULT_LIGHTING_KEY,
            R"(Get a copy of the LightSetup registered with a specific key.)")
       .def(
           "set_light_setup", &Simulator::setLightSetup, "light_setup"_a,
-          "key"_a = metadata::MetadataMediator::DEFAULT_LIGHTING_KEY,
+          "key"_a = DEFAULT_LIGHTING_KEY,
           R"(Register a LightSetup with a specific key. If a LightSetup is already registered with this key, it will be overriden. All Drawables referencing the key will use the newly registered LightSetup.)")
       .def(
           "set_object_light_setup", &Simulator::setObjectLightSetup,
