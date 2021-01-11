@@ -140,7 +140,7 @@ if(BUILD_WITH_BULLET AND NOT USE_SYSTEM_BULLET)
   set(BUILD_ENET OFF CACHE BOOL "" FORCE)
   set(BUILD_CLSOCKET OFF CACHE BOOL "" FORCE)
   set(BUILD_EXTRAS ON CACHE BOOL "" FORCE)
-  set(BUILD_BULLET3 OFF CACHE BOOL "" FORCE)
+  set(BUILD_BULLET3 ON CACHE BOOL "" FORCE)
   #  Need this, but does not build...
   set(BUILD_PYBULLET OFF CACHE BOOL "" FORCE)
   # This is needed in case BUILD_EXTRAS is enabled, as you'd get a CMake syntax

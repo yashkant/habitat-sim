@@ -13,7 +13,7 @@
 #include "esp/physics/PhysicsManager.h"
 
 // must include these directly from examples
-#include "bullet3/examples/SharedMemory/PhysicsClientC_API.h"
+#include "bullet3/examples/SharedMemory/b3RobotSimulatorClientAPI_NoGUI.h"
 
 namespace esp {
 namespace physics {
@@ -39,7 +39,31 @@ class CBulletPhysicsManager : public PhysicsManager {
       assets::ResourceManager& _resourceManager,
       const metadata::attributes::PhysicsManagerAttributes::cptr
           _physicsManagerAttributes)
-      : PhysicsManager(_resourceManager, _physicsManagerAttributes){};
+      : PhysicsManager(_resourceManager, _physicsManagerAttributes) {
+    Mn::Debug{}
+        << "+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=";
+    Mn::Debug{}
+        << "+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=";
+    Mn::Debug{}
+        << "+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=";
+    Mn::Debug{} << "Constructing CBulletPhysicsManager!";
+
+    sim = new b3RobotSimulatorClientAPI_NoGUI();
+
+    bool isConnected = sim->connect(eCONNECT_SHARED_MEMORY);
+
+    if (!isConnected) {
+      Mn::Debug{} << "Using Direct mode";
+      isConnected = sim->connect(eCONNECT_DIRECT);
+      int URDFId = sim->loadURDF(
+          "/Users/alexclegg/Documents/dev2/habitat-sim/data/URDF_demo_assets/"
+          "aliengo/urdf/aliengo.urdf");
+      Mn::Debug{} << "Loaded URDF " << URDFId;
+
+    } else {
+      Mn::Debug{} << "Using shared memory";
+    };
+  };
 
   /** @brief Destructor which destructs necessary Bullet physics structures.*/
   virtual ~CBulletPhysicsManager();
@@ -51,17 +75,17 @@ class CBulletPhysicsManager : public PhysicsManager {
    * btMultiBodyDynamicsWorld::stepSimulation.
    * @param dt The desired amount of time to advance the physical world.
    */
-  void stepPhysics(double dt) override;
+  void stepPhysics(double dt) override{};
 
   /** @brief Set the gravity of the physical world.
    * @param gravity The desired gravity force of the physical world.
    */
-  void setGravity(const Magnum::Vector3& gravity) override;
+  void setGravity(const Magnum::Vector3& gravity) override{};
 
   /** @brief Get the current gravity in the physical world.
    * @return The current gravity vector in the physical world.
    */
-  Magnum::Vector3 getGravity() const override;
+  Magnum::Vector3 getGravity() const override { return {}; };
 
   //============ Interacting with objects =============
   // NOTE: engine specifics for interaction are handled by the objects
@@ -75,7 +99,7 @@ class CBulletPhysicsManager : public PhysicsManager {
    * PhysicsManager::existingObjects_.
    * @param  margin The desired collision margin for the object.
    */
-  void setMargin(const int physObjectID, const double margin) override;
+  void setMargin(const int physObjectID, const double margin) override{};
 
   /** @brief Set the friction coefficient of the stage collision geometry. See
    * @ref staticStageObject_. See @ref
@@ -83,7 +107,7 @@ class CBulletPhysicsManager : public PhysicsManager {
    * @param frictionCoefficient The scalar friction coefficient of the stage
    * geometry.
    */
-  void setStageFrictionCoefficient(const double frictionCoefficient) override;
+  void setStageFrictionCoefficient(const double frictionCoefficient) override{};
 
   /** @brief Set the coefficient of restitution for the stage collision
    * geometry. See @ref staticStageObject_. See @ref
@@ -91,7 +115,7 @@ class CBulletPhysicsManager : public PhysicsManager {
    * @param restitutionCoefficient The scalar coefficient of restitution to set.
    */
   void setStageRestitutionCoefficient(
-      const double restitutionCoefficient) override;
+      const double restitutionCoefficient) override{};
 
   //============ Bullet-specific Object Getter functions =============
 
@@ -102,14 +126,14 @@ class CBulletPhysicsManager : public PhysicsManager {
    * @return The scalar collision margin of the object or @ref
    * esp::PHYSICS_ATTR_UNDEFINED if failed..
    */
-  double getMargin(const int physObjectID) const override;
+  double getMargin(const int physObjectID) const override { return 0; };
 
   /** @brief Get the current friction coefficient of the stage collision
    * geometry. See @ref staticStageObject_ and @ref
    * BulletRigidObject::getFrictionCoefficient.
    * @return The scalar friction coefficient of the stage geometry.
    */
-  double getStageFrictionCoefficient() const override;
+  double getStageFrictionCoefficient() const override { return 0; };
 
   /** @brief Get the current coefficient of restitution for the stage
    * collision geometry. This determines the ratio of initial to final relative
@@ -117,7 +141,7 @@ class CBulletPhysicsManager : public PhysicsManager {
    * staticStageObject_ and BulletRigidObject::getRestitutionCoefficient.
    * @return The scalar coefficient of restitution for the stage geometry.
    */
-  double getStageRestitutionCoefficient() const override;
+  double getStageRestitutionCoefficient() const override { return 0; };
 
   /**
    * @brief Query the Aabb from bullet physics for the root compound shape of a
@@ -126,14 +150,16 @@ class CBulletPhysicsManager : public PhysicsManager {
    * PhysicsManager::existingObjects_.
    * @return The Aabb.
    */
-  const Magnum::Range3D getCollisionShapeAabb(const int physObjectID) const;
+  const Magnum::Range3D getCollisionShapeAabb(const int physObjectID) const {
+    return {};
+  };
 
   /**
    * @brief Query the Aabb from bullet physics for the root compound shape of
    * the static stage in its local space. See @ref btCompoundShape::getAabb.
    * @return The stage collision Aabb.
    */
-  const Magnum::Range3D getStageCollisionShapeAabb() const;
+  const Magnum::Range3D getStageCollisionShapeAabb() const { return {}; };
 
   /** @brief Render the debugging visualizations provided by @ref
    * Magnum::BulletIntegration::DebugDraw. This draws wireframes for all
@@ -141,7 +167,7 @@ class CBulletPhysicsManager : public PhysicsManager {
    * @param projTrans The composed projection and transformation matrix for the
    * render camera.
    */
-  virtual void debugDraw(const Magnum::Matrix4& projTrans) const override;
+  virtual void debugDraw(const Magnum::Matrix4& projTrans) const override{};
 
   /**
    * @brief Check whether an object is in contact with any other objects or the
@@ -152,7 +178,7 @@ class CBulletPhysicsManager : public PhysicsManager {
    * @return Whether or not the object is in contact with any other collision
    * enabled objects.
    */
-  bool contactTest(const int physObjectID) override;
+  bool contactTest(const int physObjectID) override { return false; };
 
   /**
    * @brief Cast a ray into the collision world and return a @ref RaycastResults
@@ -165,14 +191,16 @@ class CBulletPhysicsManager : public PhysicsManager {
    * @return The raycast results sorted by distance.
    */
   virtual RaycastResults castRay(const esp::geo::Ray& ray,
-                                 double maxDistance = 100.0) override;
+                                 double maxDistance = 100.0) override {
+    return {};
+  };
 
   // The number of contact points that were active during the last step. An
   // object resting on another object will involve several active contact
   // points. Once both objects are asleep, the contact points are inactive. This
   // count can be used as a metric for the complexity/cost of collision-handling
   // in the current scene.
-  int getNumActiveContactPoints() override;
+  int getNumActiveContactPoints() override { return 0; };
 
  protected:
   //============ Initialization =============
@@ -180,7 +208,7 @@ class CBulletPhysicsManager : public PhysicsManager {
    * @brief Finalize physics initialization: Setup staticStageObject_ and
    * initialize any other physics-related values.
    */
-  bool initPhysicsFinalize() override;
+  bool initPhysicsFinalize() override { return true; };
 
   //============ Object/Stage Instantiation =============
   /**
@@ -192,7 +220,7 @@ class CBulletPhysicsManager : public PhysicsManager {
    * properties of the stage.
    * @return true if successful and false otherwise
    */
-  bool addStageFinalize(const std::string& handle) override;
+  bool addStageFinalize(const std::string& handle) override { return true; };
 
   /** @brief Create and initialize an @ref RigidObject and add
    * it to existingObjects_ map keyed with newObjectID
@@ -206,7 +234,9 @@ class CBulletPhysicsManager : public PhysicsManager {
    */
   bool makeAndAddRigidObject(int newObjectID,
                              const std::string& handle,
-                             scene::SceneNode* objectNode) override;
+                             scene::SceneNode* objectNode) override {
+    return true;
+  };
 
  private:
   /** @brief Check if a particular mesh can be used as a collision mesh for
@@ -216,7 +246,12 @@ class CBulletPhysicsManager : public PhysicsManager {
    * Magnum::MeshPrimitive::Triangles.
    * @return true if valid, false otherwise.
    */
-  bool isMeshPrimitiveValid(const assets::CollisionMeshData& meshData) override;
+  bool isMeshPrimitiveValid(
+      const assets::CollisionMeshData& meshData) override {
+    return true;
+  };
+
+  b3RobotSimulatorClientAPI_NoGUI* sim;
 
   ESP_SMART_POINTERS(CBulletPhysicsManager)
 

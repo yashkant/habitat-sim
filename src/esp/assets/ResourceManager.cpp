@@ -47,6 +47,7 @@
 
 #ifdef ESP_BUILD_WITH_BULLET
 #include "esp/physics/bullet/BulletPhysicsManager.h"
+#include "esp/physics/pybullet/CBulletPhysicsManager.h"
 #endif
 
 #include "CollisionMeshData.h"
@@ -153,6 +154,20 @@ void ResourceManager::initPhysicsManager(
 #else
       LOG(WARNING)
           << ":\n---\nPhysics was enabled and Bullet physics engine was "
+             "specified, but the project is built without Bullet support. "
+             "Objects added to the scene will be restricted to kinematic "
+             "updates "
+             "only. Reinstall with --bullet to enable Bullet dynamics.\n---";
+#endif
+    } else if (physicsManagerAttributes->getSimulator().compare("pybullet") ==
+               0) {
+#ifdef ESP_BUILD_WITH_BULLET
+      physicsManager.reset(
+          new physics::CBulletPhysicsManager(*this, physicsManagerAttributes));
+      defaultToNoneSimulator = false;
+#else
+      LOG(WARNING)
+          << ":\n---\nPhysics was enabled and PyBullet physics engine was "
              "specified, but the project is built without Bullet support. "
              "Objects added to the scene will be restricted to kinematic "
              "updates "

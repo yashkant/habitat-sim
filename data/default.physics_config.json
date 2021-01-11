@@ -1,5 +1,5 @@
 {
-    "physics_simulator": "bullet",
+    "physics_simulator": "pybullet",
     "timestep": 0.008,
     "gravity": [0,-9.8,0],
     "friction_coefficient": 0.4,
