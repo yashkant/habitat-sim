@@ -83,6 +83,8 @@ void initSimBindings(py::module& m) {
                &Simulator::getActiveSemanticSceneGraph,
                R"(PYTHON DOES NOT GET OWNERSHIP)",
                py::return_value_policy::reference)
+          .def_property_readonly("is_semantic_scene_graph_shared",
+                                 &Simulator::isSemanticSceneGraphShared)
           .def_property_readonly("semantic_scene", &Simulator::getSemanticScene,
                                  R"(
         The semantic scene graph

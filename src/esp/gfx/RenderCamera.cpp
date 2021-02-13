@@ -49,6 +49,22 @@ Cr::Containers::Optional<int> rangeFrustum(const Mn::Range3D& range,
   return Cr::Containers::NullOpt;
 }
 
+Cr::Containers::Optional<int> sphereFrustum(const Mn::Vector3& sphereCenter,
+                                            const float sphereRadius,
+                                            const Mn::Frustum& frustum,
+                                            int frustumPlaneIndex = 0) {
+  const float radiusSq = sphereRadius * sphereRadius;
+  for (int iPlane = 0; iPlane < 6; ++iPlane) {
+    int index = (iPlane + frustumPlaneIndex) % 6;
+
+    const Mn::Vector4& plane = frustum[index];
+    if (Mn::Math::Distance::pointPlaneScaled(sphereCenter, plane) < -radiusSq)
+      return Cr::Containers::Optional<int>{index};
+  }
+
+  return Cr::Containers::NullOpt;
+}
+
 RenderCamera::RenderCamera(scene::SceneNode& node) : MagnumCamera{node} {
   node.setType(scene::SceneNodeType::CAMERA);
   setAspectRatioPolicy(Mn::SceneGraph::AspectRatioPolicy::NotPreserved);
@@ -117,24 +133,31 @@ size_t RenderCamera::cull(
   auto newEndIter = std::remove_if(
       drawableTransforms.begin(), drawableTransforms.end(),
       [&](const std::pair<std::reference_wrapper<Mn::SceneGraph::Drawable3D>,
-                          Mn::Matrix4>& a) {
+                          Mn::Matrix4>& a) -> bool {
         // obtain the absolute aabb
         auto& node = static_cast<scene::SceneNode&>(a.first.get().object());
+        Cr::Containers::Optional<int> culledPlane;
         Corrade::Containers::Optional<Mn::Range3D> aabb =
             node.getAbsoluteAABB();
         if (aabb) {
           // if it has an absolute aabb, it is a static mesh
-          Cr::Containers::Optional<int> culledPlane =
+          culledPlane =
               rangeFrustum(*aabb, frustum, node.getFrustumPlaneIndex());
-          if (culledPlane) {
-            node.setFrustumPlaneIndex(*culledPlane);
-          }
-          // if it has value, it means the aabb is culled
-          return (culledPlane != Cr::Containers::NullOpt);
         } else {
-          // keep the drawable if its node does not have an absolute AABB
-          return false;
+          // Cull based on bounding sphere
+          // Use diameter instead of radius as it isn't
+          // clear where in the sphere node.absoluteTranslation() will end up
+          // being. As long as that point is somewhere in the AABB (which it has
+          // to be), this will be correct
+          const float diameter = node.getCumulativeBB().size().length();
+          culledPlane = sphereFrustum(node.absoluteTranslation(), diameter,
+                                      frustum, node.getFrustumPlaneIndex());
         }
+        if (culledPlane) {
+          node.setFrustumPlaneIndex(*culledPlane);
+        }
+        // if it has value, it means the aabb is culled
+        return (culledPlane != Cr::Containers::NullOpt);
       });
 
   return (newEndIter - drawableTransforms.begin());

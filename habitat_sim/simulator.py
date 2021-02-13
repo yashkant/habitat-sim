@@ -90,7 +90,7 @@ class Simulator(SimulatorBackend):
             map(
                 lambda cfg: any(
                     map(
-                        lambda sens_spec: sens_spec.sensor_type == SensorType.SEMANTIC,
+                        lambda sens_spec: sens_spec.sensor_type & SensorType.SEMANTIC,
                         cfg.sensor_specifications,
                     )
                 ),
@@ -102,7 +102,7 @@ class Simulator(SimulatorBackend):
             map(
                 lambda cfg: any(
                     map(
-                        lambda sens_spec: sens_spec.sensor_type == SensorType.COLOR,
+                        lambda sens_spec: sens_spec.sensor_type & SensorType.COLOR,
                         cfg.sensor_specifications,
                     )
                 ),
@@ -485,8 +485,27 @@ class Sensor:
         self._sensor_object = self._agent._sensors[sensor_id]
 
         self._spec = self._sensor_object.specification()
+        self._sensor_type = self._spec.sensor_type
+        self._naming_map = {
+            SensorType.SEMANTIC: "semantic",
+            SensorType.DEPTH: "depth",
+            SensorType.COLOR: "color",
+        }
+
+        if (
+            (self._sensor_type & SensorType.SEMANTIC)
+            and (
+                (self._sensor_type & SensorType.DEPTH)
+                or (self._sensor_type & SensorType.COLOR)
+            )
+            and not self._sim.is_semantic_scene_graph_shared
+        ):
+            raise RuntimeError(
+                "Only supports semantic + RGB/Depth if semantic scene graph is shared"
+            )
 
         self._sim.renderer.bind_render_target(self._sensor_object)
+        self._result_buffers = dict()
 
         if self._spec.gpu2gpu_transfer:
             assert cuda_enabled, "Must build habitat sim with cuda for gpu2gpu-transfer"
@@ -495,31 +514,33 @@ class Sensor:
             torch.cuda.set_device(device)
 
             resolution = self._spec.resolution
-            if self._spec.sensor_type == SensorType.SEMANTIC:
-                self._buffer = torch.empty(
+
+            if self._sensor_type & SensorType.SEMANTIC:
+                self._result_buffers[SensorType.SEMANTIC] = torch.empty(
                     resolution[0], resolution[1], dtype=torch.int32, device=device
                 )
-            elif self._spec.sensor_type == SensorType.DEPTH:
-                self._buffer = torch.empty(
+            if self._sensor_type & SensorType.DEPTH:
+                self._result_buffers[SensorType.DEPTH] = torch.empty(
                     resolution[0], resolution[1], dtype=torch.float32, device=device
                 )
-            else:
-                self._buffer = torch.empty(
+            if self._sensor_type & SensorType.COLOR:
+                self._result_buffers[SensorType.COLOR] = torch.empty(
                     resolution[0], resolution[1], 4, dtype=torch.uint8, device=device
                 )
         else:
-            if self._spec.sensor_type == SensorType.SEMANTIC:
-                self._buffer = np.empty(
+            if self._sensor_type & SensorType.SEMANTIC:
+                self._result_buffers[SensorType.SEMANTIC] = np.empty(
                     (self._spec.resolution[0], self._spec.resolution[1]),
                     dtype=np.uint32,
                 )
-            elif self._spec.sensor_type == SensorType.DEPTH:
-                self._buffer = np.empty(
+
+            if self._sensor_type & SensorType.DEPTH:
+                self._result_buffers[SensorType.DEPTH] = np.empty(
                     (self._spec.resolution[0], self._spec.resolution[1]),
                     dtype=np.float32,
                 )
-            else:
-                self._buffer = np.empty(
+            if self._sensor_type & SensorType.COLOR:
+                self._result_buffers[SensorType.COLOR] = np.empty(
                     (
                         self._spec.resolution[0],
                         self._spec.resolution[1],
@@ -580,9 +601,8 @@ class Sensor:
 
         # add an OBJECT only 2nd pass on the standard SceneGraph if SEMANTIC sensor with separate semantic SceneGraph
         if (
-            self._spec.sensor_type == SensorType.SEMANTIC
-            and self._sim.get_active_scene_graph()
-            is not self._sim.get_active_semantic_scene_graph()
+            self._sensor_type & SensorType.SEMANTIC
+            and not self._sim.is_semantic_scene_graph_shared
         ):
             agent_node.parent = self._sim.get_active_scene_graph().get_root_node()
             render_flags |= habitat_sim.gfx.Camera.Flags.OBJECTS_ONLY
@@ -590,43 +610,52 @@ class Sensor:
                 self._sensor_object, self._sim.get_active_scene_graph(), render_flags
             )
 
-    def get_observation(self) -> Union[ndarray, "Tensor"]:
+    def get_observation(
+        self,
+    ) -> Union[Dict[SensorType, Union[ndarray, "Tensor"]], Union[ndarray, "Tensor"]]:
 
         tgt = self._sensor_object.render_target
 
-        if self._spec.gpu2gpu_transfer:
-            with torch.cuda.device(self._buffer.device):  # type: ignore[attr-defined]
-                if self._spec.sensor_type == SensorType.SEMANTIC:
-                    tgt.read_frame_object_id_gpu(self._buffer.data_ptr())  # type: ignore[attr-defined]
-                elif self._spec.sensor_type == SensorType.DEPTH:
-                    tgt.read_frame_depth_gpu(self._buffer.data_ptr())  # type: ignore[attr-defined]
-                else:
-                    tgt.read_frame_rgba_gpu(self._buffer.data_ptr())  # type: ignore[attr-defined]
+        results = {}
+        for sen_type, buf in self._result_buffers.items():
+            if self._spec.gpu2gpu_transfer:
+                with torch.cuda.device(self._buffer.device):  # type: ignore[attr-defined]
+                    if sen_type == SensorType.SEMANTIC:
+                        tgt.read_frame_object_id_gpu(buf.data_ptr())  # type: ignore[attr-defined]
+                    elif sen_type == SensorType.DEPTH:
+                        tgt.read_frame_depth_gpu(buf.data_ptr())  # type: ignore[attr-defined]
+                    else:
+                        tgt.read_frame_rgba_gpu(buf.data_ptr())  # type: ignore[attr-defined]
 
-                obs = self._buffer.flip(0)
-        else:
-            size = self._sensor_object.framebuffer_size
-
-            if self._spec.sensor_type == SensorType.SEMANTIC:
-                tgt.read_frame_object_id(
-                    mn.MutableImageView2D(mn.PixelFormat.R32UI, size, self._buffer)
-                )
-            elif self._spec.sensor_type == SensorType.DEPTH:
-                tgt.read_frame_depth(
-                    mn.MutableImageView2D(mn.PixelFormat.R32F, size, self._buffer)
-                )
+                    buf = buf.flip(0)
             else:
-                tgt.read_frame_rgba(
-                    mn.MutableImageView2D(
-                        mn.PixelFormat.RGBA8_UNORM,
-                        size,
-                        self._buffer.reshape(self._spec.resolution[0], -1),
+                size = self._sensor_object.framebuffer_size
+
+                if sen_type == SensorType.SEMANTIC:
+                    tgt.read_frame_object_id(
+                        mn.MutableImageView2D(mn.PixelFormat.R32UI, size, buf)
                     )
-                )
+                elif sen_type == SensorType.DEPTH:
+                    tgt.read_frame_depth(
+                        mn.MutableImageView2D(mn.PixelFormat.R32F, size, buf)
+                    )
+                else:
+                    tgt.read_frame_rgba(
+                        mn.MutableImageView2D(
+                            mn.PixelFormat.RGBA8_UNORM,
+                            size,
+                            buf.reshape(self._spec.resolution[0], -1),
+                        )
+                    )
 
-            obs = np.flip(self._buffer, axis=0)
+                buf = np.flip(buf, axis=0)
 
-        return self._noise_model(obs)
+            results[sen_type] = buf
+
+        if len(results) == 1:
+            return self._noise_model(list(results.values())[0])
+        else:
+            return {self._naming_map[k]: v for k, v in results.items()}
 
     def close(self) -> None:
         self._sim = None

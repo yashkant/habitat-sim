@@ -18,18 +18,21 @@ class Simulator;
 namespace sensor {
 
 // Enumeration of types of sensors
-enum class SensorType {
-  None = 0,
-  Color = 1,
-  Depth = 2,
-  Normal = 3,
-  Semantic = 4,
-  Path = 5,
-  Goal = 6,
-  Force = 7,
-  Tensor = 8,
-  Text = 9,
+enum class SensorType : unsigned int {
+  None = 1 << 0,
+  Color = 1 << 1,
+  Depth = 1 << 2,
+  Normal = 1 << 3,
+  Semantic = 1 << 4,
+  Path = 1 << 5,
+  Goal = 1 << 6,
+  Force = 1 << 7,
+  Tensor = 1 << 8,
+  Text = 1 << 9,
 };
+
+typedef Corrade::Containers::EnumSet<SensorType> SensorTypes;
+CORRADE_ENUMSET_OPERATORS(SensorTypes)
 
 enum class ObservationSpaceType {
   None = 0,
@@ -45,7 +48,7 @@ enum class SensorSubType {
 // Specifies the configuration parameters of a sensor
 struct SensorSpec {
   std::string uuid = "rgba_camera";
-  SensorType sensorType = SensorType::Color;
+  SensorTypes sensorType = SensorType::Color;
   SensorSubType sensorSubType = SensorSubType::Pinhole;
   std::map<std::string, std::string> parameters = {{"near", "0.01"},
                                                    {"far", "1000"},

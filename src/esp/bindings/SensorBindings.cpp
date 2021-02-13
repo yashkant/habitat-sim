@@ -10,6 +10,8 @@
 #include <Magnum/PythonBindings.h>
 #include <Magnum/SceneGraph/PythonBindings.h>
 
+#include "python/corrade/EnumOperators.h"
+
 #include <utility>
 
 #include "esp/sensor/CameraSensor.h"
@@ -43,11 +45,14 @@ void initSensorBindings(py::module& m) {
 
   // TODO fill out other SensorTypes
   // ==== enum SensorType ====
-  py::enum_<SensorType>(m, "SensorType")
-      .value("NONE", SensorType::None)
-      .value("COLOR", SensorType::Color)
-      .value("DEPTH", SensorType::Depth)
-      .value("SEMANTIC", SensorType::Semantic);
+  {
+    auto flags = py::enum_<SensorType>(m, "SensorType")
+                     .value("NONE", SensorType::None)
+                     .value("COLOR", SensorType::Color)
+                     .value("DEPTH", SensorType::Depth)
+                     .value("SEMANTIC", SensorType::Semantic);
+    corrade::enumOperators(flags);
+  }
 
   py::enum_<SensorSubType>(m, "SensorSubType")
       .value("PINHOLE", SensorSubType::Pinhole)
@@ -57,7 +62,15 @@ void initSensorBindings(py::module& m) {
   py::class_<SensorSpec, SensorSpec::ptr>(m, "SensorSpec", py::dynamic_attr())
       .def(py::init(&SensorSpec::create<>))
       .def_readwrite("uuid", &SensorSpec::uuid)
-      .def_readwrite("sensor_type", &SensorSpec::sensorType)
+      .def_property(
+          "sensor_type",
+          [](SensorSpec& self) -> SensorType {
+            return SensorType(
+                Corrade::Containers::enumCastUnderlyingType(self.sensorType));
+          },
+          [](SensorSpec& self, SensorType& type) {
+            self.sensorType = SensorTypes{type};
+          })
       .def_readwrite("sensor_subtype", &SensorSpec::sensorSubType)
       .def_readwrite("parameters", &SensorSpec::parameters)
       .def_readwrite("position", &SensorSpec::position)

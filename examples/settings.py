@@ -71,6 +71,12 @@ def make_cfg(settings):
             "position": [0.0, settings["sensor_height"], 0.0],
             "sensor_subtype": habitat_sim.SensorSubType.PINHOLE,
         },
+        "rgbd_sensor": {  # active if sim_settings["rgbd_sensor"]
+            "sensor_type": habitat_sim.SensorType.COLOR | habitat_sim.SensorType.DEPTH,
+            "resolution": [settings["height"], settings["width"]],
+            "position": [0.0, settings["sensor_height"], 0.0],
+            "sensor_subtype": habitat_sim.SensorSubType.PINHOLE,
+        },
         "semantic_sensor": {  # active if sim_settings["semantic_sensor"]
             "sensor_type": habitat_sim.SensorType.SEMANTIC,
             "resolution": [settings["height"], settings["width"]],
@@ -88,7 +94,7 @@ def make_cfg(settings):
     # create sensor specifications
     sensor_specs = []
     for sensor_uuid, sensor_params in sensors.items():
-        if settings[sensor_uuid]:
+        if settings.get(sensor_uuid, False):
             sensor_spec = habitat_sim.SensorSpec()
             sensor_spec.uuid = sensor_uuid
             sensor_spec.sensor_type = sensor_params["sensor_type"]

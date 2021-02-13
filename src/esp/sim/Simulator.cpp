@@ -592,6 +592,10 @@ scene::SceneGraph& Simulator::getActiveSemanticSceneGraph() {
   return sceneManager_->getSceneGraph(activeSemanticSceneID_);
 }
 
+bool Simulator::isSemanticSceneGraphShared() const {
+  return activeSceneID_ == activeSemanticSceneID_;
+}
+
 // === Physics Simulator Functions ===
 
 int Simulator::addObject(const int objectLibId,

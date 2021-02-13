@@ -61,7 +61,6 @@ class Simulator {
 
   virtual void reset();
 
- public:
   virtual void seed(uint32_t newSeed);
 
   std::shared_ptr<gfx::Renderer> getRenderer() { return renderer_; }
@@ -71,6 +70,8 @@ class Simulator {
 
   scene::SceneGraph& getActiveSceneGraph();
   scene::SceneGraph& getActiveSemanticSceneGraph();
+
+  bool isSemanticSceneGraphShared() const;
 
   std::shared_ptr<gfx::replay::ReplayManager> getGfxReplayManager() {
     return gfxReplayMgr_;

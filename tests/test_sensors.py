@@ -37,14 +37,31 @@ def _render_and_load_gt(sim, scene, sensor_type, gpu2gpu):
 
     assert sensor_type in obs, f"{sensor_type} not in obs"
 
-    gt_obs_file = osp.abspath(
-        osp.join(
-            osp.dirname(__file__),
-            "gt_data",
-            "{}-{}.npy".format(osp.basename(osp.splitext(scene)[0]), sensor_type),
+    gt = {}
+    if sensor_type == "rgbd_sensor":
+        for sens_type in ["color_sensor", "depth_sensor"]:
+            gt_obs_file = osp.abspath(
+                osp.join(
+                    osp.dirname(__file__),
+                    "gt_data",
+                    "{}-{}.npy".format(osp.basename(osp.splitext(scene)[0]), sens_type),
+                )
+            )
+            gt[sens_type] = np.load(gt_obs_file)
+
+        obs = dict(
+            depth_sensor=obs["rgbd_sensor"]["depth"],
+            color_sensor=obs["rgbd_sensor"]["color"],
         )
-    )
-    gt = np.load(gt_obs_file)
+    else:
+        gt_obs_file = osp.abspath(
+            osp.join(
+                osp.dirname(__file__),
+                "gt_data",
+                "{}-{}.npy".format(osp.basename(osp.splitext(scene)[0]), sensor_type),
+            )
+        )
+        gt[sensor_type] = np.load(gt_obs_file)
 
     if gpu2gpu:
         torch = pytest.importorskip("torch")
@@ -83,7 +100,7 @@ _test_scenes = [
     ),
 ]
 
-all_sensor_types = ["color_sensor", "depth_sensor", "semantic_sensor"]
+all_sensor_types = ["color_sensor", "depth_sensor", "semantic_sensor", "rgbd_sensor"]
 
 
 @pytest.mark.gfxtest
@@ -145,11 +162,12 @@ def test_sensors(
         # Different GPUs and different driver version will produce slightly
         # different images; differences on aliased edges might also stem from how a
         # particular importer parses transforms
-        assert np.linalg.norm(
-            obs[sensor_type].astype(np.float) - gt.astype(np.float)
-        ) < 9.0e-2 * np.linalg.norm(
-            gt.astype(np.float)
-        ), f"Incorrect {sensor_type} output"
+        for k, v in gt.items():
+            assert np.linalg.norm(
+                obs[k].astype(np.float) - v.astype(np.float)
+            ) < 9.0e-2 * np.linalg.norm(
+                v.astype(np.float)
+            ), f"Incorrect {sensor_type} output"
 
 
 @pytest.mark.gfxtest
@@ -180,9 +198,9 @@ def test_reconfigure_render(
         # different images; differences on aliased edges might also stem from how a
         # particular importer parses transforms
         assert np.linalg.norm(
-            obs[sensor_type].astype(np.float) - gt.astype(np.float)
+            obs[sensor_type].astype(np.float) - gt[sensor_type].astype(np.float)
         ) < 9.0e-2 * np.linalg.norm(
-            gt.astype(np.float)
+            gt[sensor_type].astype(np.float)
         ), f"Incorrect {sensor_type} output"
 
     sim.close()
@@ -229,9 +247,9 @@ def test_smoke_redwood_noise(scene, gpu2gpu, make_cfg_settings):
         obs, gt = _render_and_load_gt(sim, scene, "depth_sensor", gpu2gpu)
 
         assert np.linalg.norm(
-            obs["depth_sensor"].astype(np.float) - gt.astype(np.float)
+            obs["depth_sensor"].astype(np.float) - gt["depth_sensor"].astype(np.float)
         ) > 1.5e-2 * np.linalg.norm(
-            gt.astype(np.float)
+            gt["depth_sensor"].astype(np.float)
         ), "Incorrect depth_sensor output"
 
     sim.close()
@@ -263,7 +281,7 @@ def test_rgb_noise(scene, model_name, make_cfg_settings):
         obs, gt = _render_and_load_gt(sim, scene, "color_sensor", False)
 
         assert np.linalg.norm(
-            obs["color_sensor"].astype(np.float) - gt.astype(np.float)
+            obs["color_sensor"].astype(np.float) - gt["color_sensor"].astype(np.float)
         ) > 1.5e-2 * np.linalg.norm(
-            gt.astype(np.float)
+            gt["color_sensor"].astype(np.float)
         ), "Incorrect color_sensor output"
