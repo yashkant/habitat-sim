@@ -454,6 +454,12 @@ Magnum::Vector3 BulletRigidObject::getCOM() const {
   return com;
 }  // getCOM
 
+Mn::Range3D BulletRigidObject::getAABB() const {
+  btVector3 min, max;
+  bObjectRigidBody_->getAabb(min, max);
+  return {Mn::Vector3{min}, Mn::Vector3{max}};
+}
+
 bool BulletRigidObject::contactTest() {
   SimulationContactResultCallback src;
   bWorld_->getCollisionWorld()->contactTest(bObjectRigidBody_.get(), src);

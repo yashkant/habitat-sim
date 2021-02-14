@@ -225,6 +225,8 @@ class BulletRigidObject : public BulletBase,
    */
   Magnum::Vector3 getCOM() const override;
 
+  Magnum::Range3D getAABB() const;
+
   /** @brief Get the diagonal of the inertia matrix for an object.
    * If an object is aligned with its principle axii of inertia, the 3x3 inertia
    * matrix can be reduced to a diagonal. This is expected for Bullet. See @ref

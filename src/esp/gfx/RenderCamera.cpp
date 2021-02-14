@@ -13,6 +13,10 @@
 #include "esp/gfx/DrawableGroup.h"
 #include "esp/scene/SceneGraph.h"
 
+#ifdef ESP_BUILD_WITH_BULLET
+#include "esp/physics/bullet/BulletRigidObject.h"
+#endif
+
 namespace Mn = Magnum;
 namespace Cr = Corrade;
 
@@ -139,6 +143,29 @@ size_t RenderCamera::cull(
         Cr::Containers::Optional<int> culledPlane;
         Corrade::Containers::Optional<Mn::Range3D> aabb =
             node.getAbsoluteAABB();
+#ifdef ESP_BUILD_WITH_BULLET
+        if (!aabb) {
+          const auto* parent = &node;
+          for (int i = 0; i < 4 && parent; ++i)
+            parent = dynamic_cast<const scene::SceneNode*>(parent->parent());
+
+          if (parent) {
+            bool found scene::preOrderFeatureTraversalWithCallback<
+                physics::BulletRigidObject>(
+                *parent,
+                [&aabb, &found](const physics::BulletRigidObject& rigid) {
+                  if (!found) {
+                    aabb = {rigid.getAABB()};
+                    found = true;
+                  } else {
+                    LOG(WARNING) << "Already found the rigid for this subtree, "
+                                    "not fulling based on AABB for safety";
+                    aabb = Cr::Containers::NullOpt;
+                  }
+                });
+          }
+        }
+#endif
         if (aabb) {
           // if it has an absolute aabb, it is a static mesh
           culledPlane =
