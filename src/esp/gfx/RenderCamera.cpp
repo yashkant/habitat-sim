@@ -150,15 +150,16 @@ size_t RenderCamera::cull(
             parent = dynamic_cast<const scene::SceneNode*>(parent->parent());
 
           if (parent) {
-            bool found scene::preOrderFeatureTraversalWithCallback<
+            bool found = false;
+            scene::preOrderFeatureTraversalWithCallback<
                 physics::BulletRigidObject>(
                 *parent,
                 [&aabb, &found](const physics::BulletRigidObject& rigid) {
                   if (!found) {
                     aabb = {rigid.getAABB()};
                     found = true;
-                  } else {
-                    LOG(WARNING) << "Already found the rigid for this subtree, "
+                  } else if (aabb && (*aabb != rigid.getAABB())) {
+                    LOG(WARNING) << "Found differening rigids in this subtree, "
                                     "not fulling based on AABB for safety";
                     aabb = Cr::Containers::NullOpt;
                   }
