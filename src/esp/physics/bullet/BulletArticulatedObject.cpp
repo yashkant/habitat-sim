@@ -19,11 +19,23 @@ namespace physics {
 
 // set node state from btTransform
 // TODO: this should probably be moved
-static void setRotationScalingFromBulletTransform(const btTransform& trans,
+static bool setRotationScalingFromBulletTransform(const btTransform& trans,
                                                   scene::SceneNode* node) {
+  bool updated = false;
   Magnum::Matrix4 converted{trans};
-  node->setRotation(Magnum::Quaternion::fromMatrix(converted.rotation()));
-  node->setTranslation(converted.translation());
+  Mn::Quaternion rot = Mn::Quaternion::fromMatrix(converted.rotation());
+  Mn::Vector3 translation = converted.translation();
+
+  if (Mn::Math::angle(rot, node->rotation()) > Mn::Rad{1e-5}) {
+    node->setRotation(rot);
+    updated = true;
+  }
+  if ((translation - node->translation()).length() > 1e-5) {
+    node->setTranslation(translation);
+    updated = true;
+  }
+
+  return updated;
 }
 
 ///////////////////////////////////
@@ -149,11 +161,23 @@ bool BulletArticulatedObject::initializeFromURDF(
             &physicsNode->createChild(), resMgr_, bWorld_, bulletLinkIx,
             collisionObjToObjIds_);
         linkNode = &links_[bulletLinkIx]->node();
+
+        const btCollisionShape* shape =
+            btMultiBody_->getLinkCollider(bulletLinkIx)->getCollisionShape();
+
+        btVector3 localAabbMin, localAabbMax;
+        auto worldTransform =
+            btMultiBody_->getLink(bulletLinkIx).m_cachedWorldTransform;
+        shape->getAabb(worldTransform, localAabbMin, localAabbMax);
+        static_cast<BulletArticulatedLink*>(links_[bulletLinkIx].get())
+            ->setCollisionShapeAabb(Mn::Range3D{Mn::Vector3{localAabbMin},
+                                                Mn::Vector3{localAabbMax}});
       }
 
       bool success =
           attachGeometry(*linkNode, link.second,
                          urdfImporter.getModel()->m_materials, drawables);
+
       // Corrade::Utility::Debug() << "geomSuccess: " << success;
 
       urdfLinkIx++;
@@ -183,22 +207,26 @@ Magnum::Matrix4 BulletArticulatedObject::getRootState() {
 }
 
 void BulletArticulatedObject::updateNodes() {
-  setRotationScalingFromBulletTransform(btMultiBody_->getBaseWorldTransform(),
-                                        &node());
+  if (btMultiBody_->isAwake()) {
+    setRotationScalingFromBulletTransform(btMultiBody_->getBaseWorldTransform(),
+                                          &node());
 
-  // update link transforms
-  for (auto& link : links_) {
-    auto worldTransform =
-        btMultiBody_->getLink(link.first).m_cachedWorldTransform;
-    setRotationScalingFromBulletTransform(worldTransform, &link.second->node());
+    // update link transforms
+    for (auto& link : links_) {
+      auto worldTransform =
+          btMultiBody_->getLink(link.first).m_cachedWorldTransform;
+      if (setRotationScalingFromBulletTransform(worldTransform,
+                                                &link.second->node())) {
+        const btCollisionShape* shape =
+            btMultiBody_->getLinkCollider(link.first)->getCollisionShape();
 
-    const btCollisionShape* shape =
-        btMultiBody_->getLinkCollider(link.first)->getCollisionShape();
-    btVector3 localAabbMin, localAabbMax;
-    shape->getAabb(worldTransform, localAabbMin, localAabbMax);
-    static_cast<BulletArticulatedLink*>(link.second.get())
-        ->setCollisionShapeAabb(
-            Mn::Range3D{Mn::Vector3{localAabbMin}, Mn::Vector3{localAabbMax}});
+        btVector3 localAabbMin, localAabbMax;
+        shape->getAabb(worldTransform, localAabbMin, localAabbMax);
+        static_cast<BulletArticulatedLink*>(link.second.get())
+            ->setCollisionShapeAabb(Mn::Range3D{Mn::Vector3{localAabbMin},
+                                                Mn::Vector3{localAabbMax}});
+      }
+    }
   }
 }
 

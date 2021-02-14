@@ -154,7 +154,7 @@ size_t RenderCamera::cull(
           // Need to go three levels up to find the node with the
           // ArticulatedLink feature
           for (int i = 0; i < 3 && parent; ++i) {
-            parent = dynamic_cast<const scene::SceneNode*>(parent->parent());
+            parent = static_cast<const scene::SceneNode*>(parent->parent());
           }
 
           if (parent) {
@@ -175,7 +175,7 @@ size_t RenderCamera::cull(
           if (!aabb && parent) {
             // Need to go up one more level to find a rigid node
             for (int i = 0; i < 1 && parent; ++i)
-              parent = dynamic_cast<const scene::SceneNode*>(parent->parent());
+              parent = static_cast<const scene::SceneNode*>(parent->parent());
 
             if (parent) {
               int i = 0;
@@ -192,19 +192,6 @@ size_t RenderCamera::cull(
                   i == 0 || i == 2,
                   "Didn't find two or zero rigids, that shouldn't happen...",
                   {});
-            }
-
-            // A rigid could be very large with lots of subparts, so if the
-            // rigid aabb is larger than the bounding sphere aabb for this node,
-            // cull with the bounding sphere instead
-            if (aabb) {
-              // Use volume as the proxy for how good a cull will be
-              if (aabb->size().product() >
-                  (4 / 3 * Mn::Math::Constants<float>::pi() *
-                   Mn::Math::pow(node.getCumulativeBB().size().length(),
-                                 3.0f))) {
-                aabb = Cr::Containers::NullOpt;
-              }
             }
           }
         }
