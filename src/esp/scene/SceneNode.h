@@ -52,6 +52,17 @@ class SceneNode : public MagnumObject {
     new U{*this, std::forward<Args>(args)...};
   }
 
+  template <class Feature>
+  int numOfFeature() const {
+    int cnt = 0;
+    for (auto& abstractFeature : features()) {
+      auto feature = dynamic_cast<const Feature*>(&abstractFeature);
+      if (feature)
+        ++cnt;
+    }
+    return cnt;
+  }
+
   //! Create a new child SceneNode and return it. NOTE: this SceneNode owns and
   //! is responsible for deallocating created child
   //! NOTE: child node inherits parent id by default

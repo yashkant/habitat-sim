@@ -15,6 +15,9 @@
 
 #ifdef ESP_BUILD_WITH_BULLET
 #include "esp/physics/bullet/BulletRigidObject.h"
+
+#include "esp/physics/bullet/BulletArticulatedObject.h"
+#include "esp/physics/bullet/BulletURDFImporter.h"
 #endif
 
 namespace Mn = Magnum;
@@ -145,25 +148,64 @@ size_t RenderCamera::cull(
             node.getAbsoluteAABB();
 #ifdef ESP_BUILD_WITH_BULLET
         if (!aabb) {
+          // Guess that it is an articulated object
+
           const auto* parent = &node;
-          for (int i = 0; i < 4 && parent; ++i)
+          // Need to go three levels up to find the node with the
+          // ArticulatedLink feature
+          for (int i = 0; i < 3 && parent; ++i) {
             parent = dynamic_cast<const scene::SceneNode*>(parent->parent());
+          }
 
           if (parent) {
-            bool found = false;
-            scene::preOrderFeatureTraversalWithCallback<
-                physics::BulletRigidObject>(
-                *parent,
-                [&aabb, &found](const physics::BulletRigidObject& rigid) {
-                  if (!found) {
-                    aabb = {rigid.getAABB()};
-                    found = true;
-                  } else if (aabb && (*aabb != rigid.getAABB())) {
-                    LOG(WARNING) << "Found differening rigids in this subtree, "
-                                    "not fulling based on AABB for safety";
-                    aabb = Cr::Containers::NullOpt;
-                  }
-                });
+            int i = 0;
+            for (auto& abstractFeature : parent->features()) {
+              auto link = dynamic_cast<const physics::BulletArticulatedLink*>(
+                  &abstractFeature);
+              if (link) {
+                ++i;
+                if (!aabb)
+                  aabb = {link->getCollisionShapeAabb()};
+              }
+            }
+            CORRADE_ASSERT(i == 0 || i == 1, "Didn't find 1 or 0 links", {});
+          }
+
+          // Otherwise try to see if it is a rigid
+          if (!aabb && parent) {
+            // Need to go up one more level to find a rigid node
+            for (int i = 0; i < 1 && parent; ++i)
+              parent = dynamic_cast<const scene::SceneNode*>(parent->parent());
+
+            if (parent) {
+              int i = 0;
+              for (auto& abstractFeature : parent->features()) {
+                auto rigid = dynamic_cast<const physics::BulletRigidObject*>(
+                    &abstractFeature);
+                if (rigid) {
+                  ++i;
+                  if (!aabb)
+                    aabb = {rigid->getRigidBodyAabb()};
+                }
+              }
+              CORRADE_ASSERT(
+                  i == 0 || i == 2,
+                  "Didn't find two or zero rigids, that shouldn't happen...",
+                  {});
+            }
+
+            // A rigid could be very large with lots of subparts, so if the
+            // rigid aabb is larger than the bounding sphere aabb for this node,
+            // cull with the bounding sphere instead
+            if (aabb) {
+              // Use volume as the proxy for how good a cull will be
+              if (aabb->size().product() >
+                  (4 / 3 * Mn::Math::Constants<float>::pi() *
+                   Mn::Math::pow(node.getCumulativeBB().size().length(),
+                                 3.0f))) {
+                aabb = Cr::Containers::NullOpt;
+              }
+            }
           }
         }
 #endif

@@ -36,13 +36,18 @@ class BulletArticulatedLink : public ArticulatedLink, public BulletBase {
 
   virtual const Magnum::Range3D getCollisionShapeAabb() const override {
     // TODO: collision object should be linked here
-    return Magnum::Range3D();
+    return collisionShapeAabb_;
   };
+
+  virtual void setCollisionShapeAabb(const Magnum::Range3D& aabb) {
+    collisionShapeAabb_ = aabb;
+  }
 
   //! link can't do this.
   virtual bool setMotionType(MotionType mt) override { return false; };
 
  protected:
+  Magnum::Range3D collisionShapeAabb_;
   int mbIndex_;
 
  private:

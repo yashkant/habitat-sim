@@ -188,9 +188,17 @@ void BulletArticulatedObject::updateNodes() {
 
   // update link transforms
   for (auto& link : links_) {
-    setRotationScalingFromBulletTransform(
-        btMultiBody_->getLink(link.first).m_cachedWorldTransform,
-        &link.second->node());
+    auto worldTransform =
+        btMultiBody_->getLink(link.first).m_cachedWorldTransform;
+    setRotationScalingFromBulletTransform(worldTransform, &link.second->node());
+
+    const btCollisionShape* shape =
+        btMultiBody_->getLinkCollider(link.first)->getCollisionShape();
+    btVector3 localAabbMin, localAabbMax;
+    shape->getAabb(worldTransform, localAabbMin, localAabbMax);
+    static_cast<BulletArticulatedLink*>(link.second.get())
+        ->setCollisionShapeAabb(
+            Mn::Range3D{Mn::Vector3{localAabbMin}, Mn::Vector3{localAabbMax}});
   }
 }
 

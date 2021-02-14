@@ -454,7 +454,7 @@ Magnum::Vector3 BulletRigidObject::getCOM() const {
   return com;
 }  // getCOM
 
-Mn::Range3D BulletRigidObject::getAABB() const {
+Mn::Range3D BulletRigidObject::getRigidBodyAabb() const {
   btVector3 min, max;
   bObjectRigidBody_->getAabb(min, max);
   return {Mn::Vector3{min}, Mn::Vector3{max}};
