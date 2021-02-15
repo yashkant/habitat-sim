@@ -161,17 +161,6 @@ bool BulletArticulatedObject::initializeFromURDF(
             &physicsNode->createChild(), resMgr_, bWorld_, bulletLinkIx,
             collisionObjToObjIds_);
         linkNode = &links_[bulletLinkIx]->node();
-
-        const btCollisionShape* shape =
-            btMultiBody_->getLinkCollider(bulletLinkIx)->getCollisionShape();
-
-        btVector3 localAabbMin, localAabbMax;
-        auto worldTransform =
-            btMultiBody_->getLink(bulletLinkIx).m_cachedWorldTransform;
-        shape->getAabb(worldTransform, localAabbMin, localAabbMax);
-        static_cast<BulletArticulatedLink*>(links_[bulletLinkIx].get())
-            ->setCollisionShapeAabb(Mn::Range3D{Mn::Vector3{localAabbMin},
-                                                Mn::Vector3{localAabbMax}});
       }
 
       bool success =
@@ -215,17 +204,8 @@ void BulletArticulatedObject::updateNodes() {
     for (auto& link : links_) {
       auto worldTransform =
           btMultiBody_->getLink(link.first).m_cachedWorldTransform;
-      if (setRotationScalingFromBulletTransform(worldTransform,
-                                                &link.second->node())) {
-        const btCollisionShape* shape =
-            btMultiBody_->getLinkCollider(link.first)->getCollisionShape();
-
-        btVector3 localAabbMin, localAabbMax;
-        shape->getAabb(worldTransform, localAabbMin, localAabbMax);
-        static_cast<BulletArticulatedLink*>(link.second.get())
-            ->setCollisionShapeAabb(Mn::Range3D{Mn::Vector3{localAabbMin},
-                                                Mn::Vector3{localAabbMax}});
-      }
+      setRotationScalingFromBulletTransform(worldTransform,
+                                            &link.second->node());
     }
   }
 }

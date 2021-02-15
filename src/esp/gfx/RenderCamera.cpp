@@ -144,77 +144,15 @@ size_t RenderCamera::cull(
         // obtain the absolute aabb
         auto& node = static_cast<scene::SceneNode&>(a.first.get().object());
         Cr::Containers::Optional<int> culledPlane;
-        Corrade::Containers::Optional<Mn::Range3D> aabb =
-            node.getAbsoluteAABB();
-#ifdef ESP_BUILD_WITH_BULLET
-        if (!aabb) {
-          // Guess that it is an articulated object
+        // This updates the AABB if needed
+        node.setClean();
+        const Mn::Range3D& aabb = node.getAbsoluteAABB();
 
-          const auto* parent = &node;
-          // Need to go three levels up to find the node with the
-          // ArticulatedLink feature
-          for (int i = 0; i < 3 && parent; ++i) {
-            parent = static_cast<const scene::SceneNode*>(parent->parent());
-          }
-
-          if (parent) {
-            int i = 0;
-            for (auto& abstractFeature : parent->features()) {
-              auto link = dynamic_cast<const physics::BulletArticulatedLink*>(
-                  &abstractFeature);
-              if (link) {
-                ++i;
-                if (!aabb)
-                  aabb = {link->getCollisionShapeAabb()};
-              }
-            }
-            CORRADE_ASSERT(i == 0 || i == 1, "Didn't find 1 or 0 links", {});
-          }
-
-          // For now culling based on rigid AABB is pointless because
-          // the aabb is per rigid object, not per geometry component of that
-          // rigid
-          if (false && !aabb && parent) {
-            // Need to go up one more level to find a rigid node
-            for (int i = 0; i < 1 && parent; ++i)
-              parent = static_cast<const scene::SceneNode*>(parent->parent());
-
-            if (parent) {
-              int i = 0;
-              for (auto& abstractFeature : parent->features()) {
-                auto rigid = dynamic_cast<const physics::BulletRigidObject*>(
-                    &abstractFeature);
-                if (rigid) {
-                  ++i;
-                  if (!aabb)
-                    aabb = {rigid->getRigidBodyAabb()};
-                }
-              }
-              CORRADE_ASSERT(
-                  i == 0 || i == 2,
-                  "Didn't find two or zero rigids, that shouldn't happen...",
-                  {});
-            }
-          }
-        }
-#endif
-        if (aabb) {
-          // if it has an absolute aabb, it is a static mesh
-          culledPlane =
-              rangeFrustum(*aabb, frustum, node.getFrustumPlaneIndex());
-        } else {
-          // Cull based on bounding sphere
-          // Use diameter instead of radius as it isn't
-          // clear where in the sphere node.absoluteTranslation() will end up
-          // being. As long as that point is somewhere in the AABB (which it has
-          // to be), this will be correct
-          const float diameter = node.getCumulativeBB().size().length();
-          culledPlane = sphereFrustum(node.absoluteTranslation(), diameter,
-                                      frustum, node.getFrustumPlaneIndex());
-        }
+        culledPlane = rangeFrustum(aabb, frustum, node.getFrustumPlaneIndex());
         if (culledPlane) {
           node.setFrustumPlaneIndex(*culledPlane);
         }
+
         // if it has value, it means the aabb is culled
         return (culledPlane != Cr::Containers::NullOpt);
       });

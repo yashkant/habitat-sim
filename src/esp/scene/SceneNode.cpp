@@ -10,20 +10,37 @@ namespace Mn = Magnum;
 namespace esp {
 namespace scene {
 
-SceneNode::SceneNode(SceneNode& parent) {
+SceneNode::SceneNode(SceneNode& parent)
+    : Mn::SceneGraph::AbstractFeature3D{*this} {
   setParent(&parent);
   setId(parent.getId());
+  setCachedTransformations(Mn::SceneGraph::CachedTransformation::Absolute);
 }
 
-SceneNode::SceneNode(MagnumScene& parentNode) {
+SceneNode::SceneNode(MagnumScene& parentNode)
+    : Mn::SceneGraph::AbstractFeature3D{*this} {
   setParent(&parentNode);
-}
+  setCachedTransformations(Mn::SceneGraph::CachedTransformation::Absolute);
+}  // namespace scene
 
 SceneNode& SceneNode::createChild() {
   // will set the parent to *this
   SceneNode* node = new SceneNode(*this);
   node->setId(this->getId());
   return *node;
+}
+
+void SceneNode::clean(const Mn::Matrix4& absoluteTransformation) {
+  aabb_ = {geo::getTransformedBB(getCumulativeBB(), absoluteTransformation)};
+}
+
+const Mn::Range3D& SceneNode::getAbsoluteAABB() const {
+  if (!aabb_) {
+    aabb_ = {geo::getTransformedBB(getCumulativeBB(),
+                                   absoluteTransformationMatrix())};
+  }
+
+  return *aabb_;
 }
 
 //! @brief recursively compute the cumulative bounding box of this node's tree.
