@@ -31,16 +31,16 @@ SceneNode& SceneNode::createChild() {
 }
 
 void SceneNode::clean(const Mn::Matrix4& absoluteTransformation) {
-  aabb_ = {geo::getTransformedBB(getCumulativeBB(), absoluteTransformation)};
+  updatedCumulativeBB_ =
+      geo::getTransformedBB(getCumulativeBB(), absoluteTransformation);
 }
 
 const Mn::Range3D& SceneNode::getAbsoluteAABB() const {
-  if (!aabb_) {
-    aabb_ = {geo::getTransformedBB(getCumulativeBB(),
-                                   absoluteTransformationMatrix())};
+  if (aabb_) {
+    return *aabb_;
+  } else {
+    return updatedCumulativeBB_;
   }
-
-  return *aabb_;
 }
 
 //! @brief recursively compute the cumulative bounding box of this node's tree.

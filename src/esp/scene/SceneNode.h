@@ -134,12 +134,17 @@ class SceneNode : public MagnumObject,
   //! node is the root
   Magnum::Range3D cumulativeBB_;
 
+  //! A cached version of cumulativeBB_ that is updated to be in
+  //! world coordinates based on the current node transform
+  //! Updated by setClean()
+  Magnum::Range3D updatedCumulativeBB_;
+
   //! the global bounding box for *static* meshes stored at this node
   //  NOTE: this is different from the local bounding box meshBB_ defined above:
   //  -) it only applies to *static* meshes, NOT dynamic meshes in the scene (so
   //  it is an optional object);
   //  -) it was computed using mesh vertex positions in world space;
-  mutable Corrade::Containers::Optional<Magnum::Range3D> aabb_ =
+  Corrade::Containers::Optional<Magnum::Range3D> aabb_ =
       Corrade::Containers::NullOpt;
 
   //! the frustum plane in last frame that culls this node
