@@ -171,8 +171,10 @@ size_t RenderCamera::cull(
             CORRADE_ASSERT(i == 0 || i == 1, "Didn't find 1 or 0 links", {});
           }
 
-          // Otherwise try to see if it is a rigid
-          if (!aabb && parent) {
+          // For now culling based on rigid AABB is pointless because
+          // the aabb is per rigid object, not per geometry component of that
+          // rigid
+          if (false && !aabb && parent) {
             // Need to go up one more level to find a rigid node
             for (int i = 0; i < 1 && parent; ++i)
               parent = static_cast<const scene::SceneNode*>(parent->parent());
@@ -262,6 +264,9 @@ uint32_t RenderCamera::draw(MagnumDrawableGroup& drawables, Flags flags) {
   if (flags & Flag::FrustumCulling) {
     // draw just the visible part
     previousNumVisibleDrawables_ = cull(drawableTransforms);
+    /* Mn::Debug{} << "Culled"
+                << drawableTransforms.size() - previousNumVisibleDrawables_
+                << "of" << drawableTransforms.size(); */
     // erase all items that did not pass the frustum visibility test
     drawableTransforms.erase(
         drawableTransforms.begin() + previousNumVisibleDrawables_,
