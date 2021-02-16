@@ -19,23 +19,14 @@ namespace physics {
 
 // set node state from btTransform
 // TODO: this should probably be moved
-static bool setRotationScalingFromBulletTransform(const btTransform& trans,
+static void setRotationScalingFromBulletTransform(const btTransform& trans,
                                                   scene::SceneNode* node) {
-  bool updated = false;
   Magnum::Matrix4 converted{trans};
   Mn::Quaternion rot = Mn::Quaternion::fromMatrix(converted.rotation());
   Mn::Vector3 translation = converted.translation();
 
-  if (Mn::Math::angle(rot, node->rotation()) > Mn::Rad{1e-5}) {
-    node->setRotation(rot);
-    updated = true;
-  }
-  if ((translation - node->translation()).length() > 1e-5) {
-    node->setTranslation(translation);
-    updated = true;
-  }
-
-  return updated;
+  node->setRotation(rot);
+  node->setTranslation(translation);
 }
 
 ///////////////////////////////////
@@ -202,10 +193,11 @@ void BulletArticulatedObject::updateNodes() {
 
     // update link transforms
     for (auto& link : links_) {
-      auto worldTransform =
-          btMultiBody_->getLink(link.first).m_cachedWorldTransform;
-      setRotationScalingFromBulletTransform(worldTransform,
-                                            &link.second->node());
+      if (btMultiBody_->getLinkCollider(link.first)->isActive()) {
+        setRotationScalingFromBulletTransform(
+            btMultiBody_->getLink(link.first).m_cachedWorldTransform,
+            &link.second->node());
+      }
     }
   }
 }

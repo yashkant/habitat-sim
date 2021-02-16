@@ -202,9 +202,9 @@ uint32_t RenderCamera::draw(MagnumDrawableGroup& drawables, Flags flags) {
   if (flags & Flag::FrustumCulling) {
     // draw just the visible part
     previousNumVisibleDrawables_ = cull(drawableTransforms);
-    /* Mn::Debug{} << "Culled"
-                << drawableTransforms.size() - previousNumVisibleDrawables_
-                << "of" << drawableTransforms.size(); */
+    // Mn::Debug{} << "Culled"
+    // << drawableTransforms.size() - previousNumVisibleDrawables_
+    // << "of" << drawableTransforms.size();
     // erase all items that did not pass the frustum visibility test
     drawableTransforms.erase(
         drawableTransforms.begin() + previousNumVisibleDrawables_,
