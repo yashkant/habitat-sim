@@ -136,8 +136,10 @@ class SceneNode : public MagnumObject,
 
   //! A cached version of cumulativeBB_ that is updated to be in
   //! world coordinates based on the current node transform
-  //! Updated by setClean()
-  Magnum::Range3D updatedCumulativeBB_;
+  mutable Corrade::Containers::Optional<Magnum::Range3D> updatedCumulativeBB_ =
+      Corrade::Containers::NullOpt;
+
+  Magnum::Matrix4 absoluteTransformation_;
 
   //! the global bounding box for *static* meshes stored at this node
   //  NOTE: this is different from the local bounding box meshBB_ defined above:

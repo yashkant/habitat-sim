@@ -31,15 +31,18 @@ SceneNode& SceneNode::createChild() {
 }
 
 void SceneNode::clean(const Mn::Matrix4& absoluteTransformation) {
-  updatedCumulativeBB_ =
-      geo::getTransformedBB(getCumulativeBB(), absoluteTransformation);
+  absoluteTransformation_ = absoluteTransformation;
+  updatedCumulativeBB_ = Cr::Containers::NullOpt;
 }
 
 const Mn::Range3D& SceneNode::getAbsoluteAABB() const {
   if (aabb_) {
     return *aabb_;
   } else {
-    return updatedCumulativeBB_;
+    if (!updatedCumulativeBB_)
+      updatedCumulativeBB_ = {
+          geo::getTransformedBB(getCumulativeBB(), absoluteTransformation_)};
+    return *updatedCumulativeBB_;
   }
 }
 
