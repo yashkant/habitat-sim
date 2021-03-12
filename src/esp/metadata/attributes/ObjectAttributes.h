@@ -30,7 +30,7 @@ class AbstractObjectAttributes : public AbstractAttributes {
   AbstractObjectAttributes(const std::string& classKey,
                            const std::string& handle);
 
-  virtual ~AbstractObjectAttributes() = default;
+  ~AbstractObjectAttributes() override = default;
 
   /**
    * @brief Scale of the ojbect
@@ -43,6 +43,13 @@ class AbstractObjectAttributes : public AbstractAttributes {
    */
   void setMargin(double margin) { setDouble("margin", margin); }
   double getMargin() const { return getDouble("margin"); }
+
+  // if object should be checked for collisions - if other objects can collide
+  // with this object
+  void setIsCollidable(bool isCollidable) {
+    setBool("is_collidable", isCollidable);
+  }
+  bool getIsCollidable() const { return getBool("is_collidable"); }
 
   /**
    * @brief set default up orientation for object/stage mesh
@@ -148,10 +155,10 @@ class AbstractObjectAttributes : public AbstractAttributes {
    * collision calculation.
    */
   void setUseMeshCollision(bool useMeshCollision) {
-    setBool("useMeshCollision", useMeshCollision);
+    setBool("use_mesh_collision", useMeshCollision);
   }
 
-  bool getUseMeshCollision() const { return getBool("useMeshCollision"); }
+  bool getUseMeshCollision() const { return getBool("use_mesh_collision"); }
 
   // if true use phong illumination model instead of flat shading
   void setRequiresLighting(bool requiresLighting) {
@@ -176,16 +183,18 @@ class AbstractObjectAttributes : public AbstractAttributes {
  */
 class ObjectAttributes : public AbstractObjectAttributes {
  public:
-  ObjectAttributes(const std::string& handle = "");
+  explicit ObjectAttributes(const std::string& handle = "");
   // center of mass (COM)
   void setCOM(const Magnum::Vector3& com) { setVec3("COM", com); }
   Magnum::Vector3 getCOM() const { return getVec3("COM"); }
 
   // whether com is provided or not
   void setComputeCOMFromShape(bool computeCOMFromShape) {
-    setBool("computeCOMFromShape", computeCOMFromShape);
+    setBool("compute_COM_from_shape", computeCOMFromShape);
   }
-  bool getComputeCOMFromShape() const { return getBool("computeCOMFromShape"); }
+  bool getComputeCOMFromShape() const {
+    return getBool("compute_COM_from_shape");
+  }
 
   void setMass(double mass) { setDouble("mass", mass); }
   double getMass() const { return getDouble("mass"); }
@@ -228,19 +237,12 @@ class ObjectAttributes : public AbstractObjectAttributes {
    * @brief If not visible can add dynamic non-rendered object into a scene
    * object.  If is not visible then should not add object to drawables.
    */
-  void setIsVisible(bool isVisible) { setBool("isVisible", isVisible); }
-  bool getIsVisible() const { return getBool("isVisible"); }
+  void setIsVisible(bool isVisible) { setBool("is_visible", isVisible); }
+  bool getIsVisible() const { return getBool("is_visible"); }
 
-  void setSemanticId(uint32_t semanticId) { setInt("semanticId", semanticId); }
+  void setSemanticId(uint32_t semanticId) { setInt("semantic_id", semanticId); }
 
-  uint32_t getSemanticId() const { return getInt("semanticId"); }
-
-  // if object should be checked for collisions - if other objects can collide
-  // with this object
-  void setIsCollidable(bool isCollidable) {
-    setBool("isCollidable", isCollidable);
-  }
-  bool getIsCollidable() { return getBool("isCollidable"); }
+  uint32_t getSemanticId() const { return getInt("semantic_id"); }
 
  public:
   ESP_SMART_POINTERS(ObjectAttributes)
@@ -256,7 +258,7 @@ class ObjectAttributes : public AbstractObjectAttributes {
  */
 class StageAttributes : public AbstractObjectAttributes {
  public:
-  StageAttributes(const std::string& handle = "");
+  explicit StageAttributes(const std::string& handle = "");
 
   void setOrigin(const Magnum::Vector3& origin) { setVec3("origin", origin); }
   Magnum::Vector3 getOrigin() const { return getVec3("origin"); }
@@ -271,16 +273,16 @@ class StageAttributes : public AbstractObjectAttributes {
   }
   std::string getHouseFilename() const { return getString("houseFilename"); }
   void setSemanticAssetHandle(const std::string& semanticAssetHandle) {
-    setString("semanticAssetHandle", semanticAssetHandle);
+    setString("semantic_asset", semanticAssetHandle);
     setIsDirty();
   }
   std::string getSemanticAssetHandle() const {
-    return getString("semanticAssetHandle");
+    return getString("semantic_asset");
   }
   void setSemanticAssetType(int semanticAssetType) {
-    setInt("semanticAssetType", semanticAssetType);
+    setInt("semantic_asset_type", semanticAssetType);
   }
-  int getSemanticAssetType() { return getInt("semanticAssetType"); }
+  int getSemanticAssetType() { return getInt("semantic_asset_type"); }
 
   void setLoadSemanticMesh(bool loadSemanticMesh) {
     setBool("loadSemanticMesh", loadSemanticMesh);
@@ -296,19 +298,26 @@ class StageAttributes : public AbstractObjectAttributes {
   }
 
   /**
-   * @brief set lighting setup for scene.  Default value comes from
+   * @brief set lighting setup for stage.  Default value comes from
    * @ref esp::sim::SimulatorConfiguration, is overridden by any value set in
    * json, if exists.
    */
   void setLightSetup(const std::string& lightSetup) {
-    setString("lightSetup", lightSetup);
+    setString("light_setup", lightSetup);
+    // force requires lighting to reflect light setup
+    setRequiresLighting(lightSetup != NO_LIGHT_KEY);
   }
-  std::string getLightSetup() { return getString("lightSetup"); }
+  std::string getLightSetup() { return getString("light_setup"); }
 
-  void setFrustrumCulling(bool frustrumCulling) {
-    setBool("frustrumCulling", frustrumCulling);
+  /**
+   * @brief set frustum culling for stage.  Default value comes from
+   * @ref esp::sim::SimulatorConfiguration, is overridden by any value set in
+   * json, if exists.
+   */
+  void setFrustumCulling(bool frustumCulling) {
+    setBool("frustum_culling", frustumCulling);
   }
-  bool getFrustrumCulling() const { return getBool("frustrumCulling"); }
+  bool getFrustumCulling() const { return getBool("frustum_culling"); }
 
  public:
   ESP_SMART_POINTERS(StageAttributes)

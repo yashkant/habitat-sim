@@ -3,17 +3,21 @@
 # LICENSE file in the root directory of this source tree.
 
 from habitat_sim._ext.habitat_sim_bindings import (
+    CameraSensor,
+    CameraSensorSpec,
     Observation,
-    PinholeCamera,
     Sensor,
     SensorSpec,
     SensorType,
     VisualSensor,
+    VisualSensorSpec,
 )
 
 __all__ = [
+    "CameraSensorSpec",
+    "VisualSensorSpec",
+    "CameraSensor",
     "Observation",
-    "PinholeCamera",
     "Sensor",
     "SensorType",
     "SensorSpec",

@@ -6,7 +6,7 @@
 
 import builtins
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 
 if not getattr(builtins, "__HSIM_SETUP__", False):
     # TODO: kept only for compatibiliy with existing code. Please gradually remove
@@ -17,6 +17,7 @@ if not getattr(builtins, "__HSIM_SETUP__", False):
         geo,
         gfx,
         logging,
+        metadata,
         nav,
         physics,
         scene,
@@ -27,6 +28,13 @@ if not getattr(builtins, "__HSIM_SETUP__", False):
         utils,
     )
     from habitat_sim._ext.habitat_sim_bindings import MapStringString  # noqa: F401
+
+    try:
+        from habitat_sim._ext.habitat_sim_bindings import VHACDParameters  # noqa: F401
+    except Exception:
+        pass
+
+    # if getattr()
     from habitat_sim.agent.agent import (  # noqa: F401
         ActionSpec,
         Agent,
@@ -45,15 +53,19 @@ if not getattr(builtins, "__HSIM_SETUP__", False):
         pyrobot_noisy_controls,
     )
     from habitat_sim.bindings import (  # noqa: F401
+        CameraSensorSpec,
         RigidState,
         SceneGraph,
         SceneNode,
         SceneNodeType,
         Sensor,
         SensorSpec,
+        SensorSubType,
         SensorType,
         SimulatorConfiguration,
+        VisualSensorSpec,
         cuda_enabled,
+        vhacd_enabled,
     )
     from habitat_sim.nav import (  # noqa: F401
         GreedyFollowerCodes,
@@ -72,6 +84,7 @@ if not getattr(builtins, "__HSIM_SETUP__", False):
         "agent",
         "attributes",
         "attributes_managers",
+        "metadata",
         "nav",
         "sensors",
         "errors",

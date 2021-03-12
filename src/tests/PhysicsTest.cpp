@@ -37,7 +37,9 @@ const std::string physicsConfigFile =
 class PhysicsManagerTest : public testing::Test {
  protected:
   void SetUp() override {
-    metadataMediator_ = MetadataMediator::create();
+    // set up a default simulation config to initialize MM
+    auto cfg = esp::sim::SimulatorConfiguration{};
+    metadataMediator_ = MetadataMediator::create(cfg);
     resourceManager_ = std::make_unique<ResourceManager>(metadataMediator_);
     context_ = esp::gfx::WindowlessContext::create_unique(0);
 
@@ -274,10 +276,23 @@ TEST_F(PhysicsManagerTest, DiscreteContactTest) {
     ASSERT_TRUE(physicsManager_->contactTest(objectId0));
     ASSERT_FALSE(physicsManager_->contactTest(objectId1));
 
+    // set stage to non-collidable
+    ASSERT_TRUE(physicsManager_->getStageIsCollidable());
+    physicsManager_->setStageIsCollidable(false);
+    ASSERT_FALSE(physicsManager_->getStageIsCollidable());
+    ASSERT_FALSE(physicsManager_->contactTest(objectId0));
+
     // move box 0 into box 1
     physicsManager_->setTranslation(objectId0, Magnum::Vector3{1.1, 1.1, 0});
     ASSERT_TRUE(physicsManager_->contactTest(objectId0));
     ASSERT_TRUE(physicsManager_->contactTest(objectId1));
+
+    // set box 0 to non-collidable
+    ASSERT_TRUE(physicsManager_->getObjectIsCollidable(objectId0));
+    physicsManager_->setObjectIsCollidable(objectId0, false);
+    ASSERT_FALSE(physicsManager_->getObjectIsCollidable(objectId0));
+    ASSERT_FALSE(physicsManager_->contactTest(objectId0));
+    ASSERT_FALSE(physicsManager_->contactTest(objectId1));
   }
 }
 

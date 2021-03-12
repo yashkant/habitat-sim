@@ -5,6 +5,7 @@
 #ifndef ESP_METADATA_ATTRIBUTES_ATTRIBUTESBASE_H_
 #define ESP_METADATA_ATTRIBUTES_ATTRIBUTESBASE_H_
 
+#include <Corrade/Utility/Directory.h>
 #include "esp/core/AbstractManagedObject.h"
 #include "esp/core/Configuration.h"
 
@@ -27,7 +28,7 @@ class AbstractAttributes : public esp::core::AbstractManagedObject,
     AbstractAttributes::setHandle(handle);
   }
 
-  virtual ~AbstractAttributes() = default;
+  ~AbstractAttributes() override = default;
   /**
    * @brief Get this attributes' class.  Should only be set from constructor.
    * Used as key in constructor function pointer maps in AttributesManagers.
@@ -42,15 +43,30 @@ class AbstractAttributes : public esp::core::AbstractManagedObject,
    * such cases this should be overridden with NOP.
    * @param handle the handle to set.
    */
-  virtual void setHandle(const std::string& handle) override {
+  void setHandle(const std::string& handle) override {
     setString("handle", handle);
   }
   std::string getHandle() const override { return getString("handle"); }
 
   /**
+   * @brief This will return a simplified version of the attributes handle. Note
+   * : there's no guarantee this handle will be sufficiently unique to identify
+   * this attributes, so this should only be used for logging, and not for
+   * attempts to search for attributes.
+   */
+  std::string getSimplifiedHandle() {
+    // first parse for file name, and then get rid of extension(s).
+    return Corrade::Utility::Directory::splitExtension(
+               Corrade::Utility::Directory::splitExtension(
+                   Corrade::Utility::Directory::filename(getHandle()))
+                   .first)
+        .first;
+  }
+
+  /**
    * @brief directory where files used to construct attributes can be found.
    */
-  virtual void setFileDirectory(const std::string& fileDirectory) override {
+  void setFileDirectory(const std::string& fileDirectory) override {
     setString("fileDirectory", fileDirectory);
   }
   std::string getFileDirectory() const override {

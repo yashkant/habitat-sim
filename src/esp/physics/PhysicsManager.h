@@ -36,14 +36,14 @@ namespace physics {
 //! Holds information about one ray hit instance.
 struct RayHitInfo {
   //! The id of the object hit by this ray. Stage hits are -1.
-  int objectId;
+  int objectId{};
   //! The first impact point of the ray in world space.
   Magnum::Vector3 point;
   //! The collision object normal at the point of impact.
   Magnum::Vector3 normal;
   //! Distance along the ray direction from the ray origin (in units of ray
   //! length).
-  double rayDistance;
+  double rayDistance{};
 
   ESP_SMART_POINTERS(RayHitInfo)
 };
@@ -123,7 +123,7 @@ class PhysicsManager {
    */
   explicit PhysicsManager(
       assets::ResourceManager& _resourceManager,
-      const metadata::attributes::PhysicsManagerAttributes::cptr
+      const metadata::attributes::PhysicsManagerAttributes::cptr&
           _physicsManagerAttributes)
       : resourceManager_(_resourceManager),
         physicsManagerAttributes_(_physicsManagerAttributes){};
@@ -181,8 +181,7 @@ class PhysicsManager {
   int addObject(const std::string& configFile,
                 DrawableGroup* drawables,
                 scene::SceneNode* attachmentNode = nullptr,
-                const Magnum::ResourceKey& lightSetup = Magnum::ResourceKey{
-                    assets::ResourceManager::DEFAULT_LIGHTING_KEY});
+                const std::string& lightSetup = DEFAULT_LIGHTING_KEY);
 
   /** @brief Instance a physical object from an object properties template in
    * the @ref esp::metadata::managers::ObjectAttributesManager by template
@@ -199,8 +198,7 @@ class PhysicsManager {
   int addObject(const int objectLibId,
                 DrawableGroup* drawables,
                 scene::SceneNode* attachmentNode = nullptr,
-                const Magnum::ResourceKey& lightSetup = Magnum::ResourceKey{
-                    assets::ResourceManager::DEFAULT_LIGHTING_KEY});
+                const std::string& lightSetup = DEFAULT_LIGHTING_KEY);
 
   /** @brief Remove an object instance from the pysical scene by ID, destroying
    * its scene graph node and removing it from @ref
@@ -842,6 +840,34 @@ class PhysicsManager {
   virtual bool contactTest(CORRADE_UNUSED const int physObjectID) {
     return false;
   };
+
+  /**
+   * @brief Set an object to collidable or not.
+   */
+  bool setObjectIsCollidable(const int physObjectID, bool collidable) {
+    assertIDValidity(physObjectID);
+    return existingObjects_.at(physObjectID)->setCollidable(collidable);
+  };
+
+  /**
+   * @brief Get whether or not an object is collision active.
+   */
+  bool getObjectIsCollidable(const int physObjectID) {
+    assertIDValidity(physObjectID);
+    return existingObjects_.at(physObjectID)->getCollidable();
+  };
+
+  /**
+   * @brief Set the stage to collidable or not.
+   */
+  bool setStageIsCollidable(bool collidable) {
+    return staticStageObject_->setCollidable(collidable);
+  };
+
+  /**
+   * @brief Get whether or not the stage is collision active.
+   */
+  bool getStageIsCollidable() { return staticStageObject_->getCollidable(); };
 
   /** @brief Return the library implementation type for the simulator currently
    * in use. Use to check for a particular implementation.

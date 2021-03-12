@@ -20,6 +20,7 @@
 #include "esp/gfx/DepthUnprojection.h"
 #include "esp/gfx/RenderTarget.h"
 #include "esp/gfx/magnum.h"
+#include "esp/sensor/VisualSensor.h"
 
 namespace Mn = Magnum;
 
@@ -47,29 +48,48 @@ struct Renderer::Impl {
   void draw(sensor::VisualSensor& visualSensor,
             scene::SceneGraph& sceneGraph,
             RenderCamera::Flags flags) {
-    ASSERT(visualSensor.isVisualSensor());
-
-    // set the modelview matrix, projection matrix of the render camera;
-    sceneGraph.setDefaultRenderCamera(visualSensor);
-
-    draw(sceneGraph.getDefaultRenderCamera(), sceneGraph, flags);
+    draw(*visualSensor.getRenderCamera(), sceneGraph, flags);
   }
 
   void bindRenderTarget(sensor::VisualSensor& sensor) {
     auto depthUnprojection = sensor.depthUnprojection();
-    if (!depthUnprojection) {
-      throw std::runtime_error(
-          "Sensor does not have a depthUnprojection matrix");
-    }
+    CORRADE_ASSERT(depthUnprojection,
+                   "Renderer::Impl::bindRenderTarget(): Sensor does not have a "
+                   "depthUnprojection matrix", );
 
     if (!depthShader_) {
       depthShader_ = std::make_unique<DepthShader>(
           DepthShader::Flag::UnprojectExistingDepth);
     }
 
+    RenderTarget::Flags renderTargetFlags_ = {};
+    switch (sensor.specification()->sensorType) {
+      case sensor::SensorType::Color:
+        CORRADE_ASSERT(
+            !(flags_ & Flag::NoTextures),
+            "Renderer::Impl::bindRenderTarget(): Tried to setup a color "
+            "render buffer while the simulator was initialized with "
+            "requiresTextures = false", );
+        renderTargetFlags_ |= RenderTarget::Flag::RgbaBuffer;
+        break;
+
+      case sensor::SensorType::Depth:
+        renderTargetFlags_ |= RenderTarget::Flag::DepthTexture;
+        break;
+
+      case sensor::SensorType::Semantic:
+        renderTargetFlags_ |= RenderTarget::Flag::ObjectIdBuffer;
+        break;
+
+      default:
+        // I need this default, since sensor type list is long, and without
+        // default clang-tidy will complain
+        break;
+    }
+
     sensor.bindRenderTarget(RenderTarget::create_unique(
         sensor.framebufferSize(), *depthUnprojection, depthShader_.get(),
-        flags_));
+        renderTargetFlags_));
   }
 
  private:

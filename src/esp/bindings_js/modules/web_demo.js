@@ -50,6 +50,9 @@ class WebDemo {
       scope: document.getElementById("scope"),
       status: document.getElementById("status")
     });
+
+    this.task.init();
+    this.task.reset();
   }
 
   updateAgentConfigWithSensors(agentConfig = defaultAgentConfig) {
@@ -57,12 +60,24 @@ class WebDemo {
       {
         uuid: "rgb",
         sensorType: Module.SensorType.COLOR,
-        resolution: [480, 640]
+        sensorSubType: Module.SensorSubType.PINHOLE
+      },
+      {
+        uuid: "left_eye",
+        sensorType: Module.SensorType.COLOR,
+        sensorSubType: Module.SensorSubType.PINHOLE,
+        resolution: [1024, 1024]
+      },
+      {
+        uuid: "right_eye",
+        sensorType: Module.SensorType.COLOR,
+        sensorSubType: Module.SensorSubType.PINHOLE,
+        resolution: [1024, 1024]
       },
       {
         uuid: "semantic",
         sensorType: Module.SensorType.SEMANTIC,
-        resolution: [480, 640],
+        sensorSubType: Module.SensorSubType.PINHOLE,
         channels: 1
       }
     ];
@@ -80,10 +95,12 @@ class WebDemo {
 
   updateAgentConfigWithResolution(agentConfig) {
     agentConfig.sensorSpecifications.forEach(sensorConfig => {
-      sensorConfig.resolution = [
-        this.currentResolution.height,
-        this.currentResolution.width
-      ];
+      if (sensorConfig.resolution === undefined) {
+        sensorConfig.resolution = [
+          this.currentResolution.height,
+          this.currentResolution.width
+        ];
+      }
     });
 
     return agentConfig;

@@ -8,20 +8,27 @@
 #   with existing code
 
 from habitat_sim._ext.habitat_sim_bindings import (
+    CameraSensor,
+    CameraSensorSpec,
     ConfigurationGroup,
     GreedyFollowerCodes,
     GreedyGeodesicFollowerImpl,
     MultiGoalShortestPath,
     PathFinder,
-    PinholeCamera,
     RigidState,
     SceneGraph,
     SceneNode,
     SceneNodeType,
     Sensor,
     SensorSpec,
+    SensorSubType,
     SensorType,
     ShortestPath,
 )
 from habitat_sim._ext.habitat_sim_bindings import Simulator as SimulatorBackend
-from habitat_sim._ext.habitat_sim_bindings import SimulatorConfiguration, cuda_enabled
+from habitat_sim._ext.habitat_sim_bindings import (
+    SimulatorConfiguration,
+    VisualSensorSpec,
+    cuda_enabled,
+    vhacd_enabled,
+)

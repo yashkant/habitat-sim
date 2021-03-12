@@ -23,7 +23,7 @@ class PathFinder;
 struct HitRecord {
   vec3f hitPos;
   vec3f hitNormal;
-  float hitDist;
+  float hitDist{};
 };
 
 /**
@@ -55,7 +55,7 @@ struct ShortestPath {
    *
    * @note Will be inf if no path exists
    */
-  float geodesicDistance;
+  float geodesicDistance{};
 
   ESP_SMART_POINTERS(ShortestPath)
 };
@@ -102,37 +102,37 @@ struct MultiGoalShortestPath {
 
 struct NavMeshSettings {
   //! Cell size in world units
-  float cellSize;
+  float cellSize{};
   //! Cell height in world units
-  float cellHeight;
+  float cellHeight{};
   //! Agent height in world units
-  float agentHeight;
+  float agentHeight{};
   //! Agent radius in world units
-  float agentRadius;
+  float agentRadius{};
   //! Agent max climb in world units
-  float agentMaxClimb;
+  float agentMaxClimb{};
   //! Agent max slope in degrees
-  float agentMaxSlope;
+  float agentMaxSlope{};
   //! Region minimum size in voxels. regionMinSize = sqrt(regionMinArea)
-  float regionMinSize;
+  float regionMinSize{};
   //! Region merge size in voxels. regionMergeSize = sqrt(regionMergeArea)
-  float regionMergeSize;
+  float regionMergeSize{};
   //! Edge max length in world units
-  float edgeMaxLen;
+  float edgeMaxLen{};
   //! Edge max error in voxels
-  float edgeMaxError;
-  float vertsPerPoly;
+  float edgeMaxError{};
+  float vertsPerPoly{};
   //! Detail sample distance in voxels
-  float detailSampleDist;
+  float detailSampleDist{};
   //! Detail sample max error in voxel heights.
-  float detailSampleMaxError;
+  float detailSampleMaxError{};
   //! Bounds of the area to mesh
   vec3f navMeshBMin;
   vec3f navMeshBMax;
 
-  bool filterLowHangingObstacles;
-  bool filterLedgeSpans;
-  bool filterWalkableLowHeightSpans;
+  bool filterLowHangingObstacles{};
+  bool filterLedgeSpans{};
+  bool filterWalkableLowHeightSpans{};
 
   void setDefaults() {
     cellSize = 0.05f;
@@ -182,13 +182,16 @@ class PathFinder {
   /**
    * @brief Returns a random navigable point
    *
+   * @param maxTries[in] The maximum number of tries sampling will be retried if
+   * it fails.
+   *
    * @return A random navigable point.
    *
    * @note This method can fail.  If it does,
-   * the returned point will be arbitrary and may not be navigable. Use @ref
+   * the returned point will be `{NAN, NAN, NAN}`. Use @ref
    * isNavigable to check if the point is navigable.
    */
-  vec3f getRandomNavigablePoint();
+  vec3f getRandomNavigablePoint(int maxTries = 10);
 
   /**
    * @brief Finds the shortest path between two points on the navigation mesh
@@ -241,7 +244,7 @@ class PathFinder {
    *
    * @param[in] pt The point to snap to the navigation mesh
    *
-   * @return The closest navigation point to @ref pt.  Will be {inf, inf, inf}
+   * @return The closest navigation point to @ref pt.  Will be `{NAN, NAN, NAN}`
    * if no navigable point was within a reasonable distance
    */
   template <typename T>

@@ -7,6 +7,8 @@
 
 #include <Corrade/Utility/Assert.h>
 
+#include <utility>
+
 #include "AbstractObjectAttributesManagerBase.h"
 #include "AssetAttributesManager.h"
 
@@ -17,10 +19,12 @@ namespace managers {
  * @brief single instance class managing templates describing physical objects
  */
 class ObjectAttributesManager
-    : public AbstractObjectAttributesManager<attributes::ObjectAttributes> {
+    : public AbstractObjectAttributesManager<attributes::ObjectAttributes,
+                                             core::ManagedObjectAccess::Copy> {
  public:
   ObjectAttributesManager()
-      : AbstractObjectAttributesManager<attributes::ObjectAttributes>::
+      : AbstractObjectAttributesManager<attributes::ObjectAttributes,
+                                        core::ManagedObjectAccess::Copy>::
             AbstractObjectAttributesManager(
                 "Object",
                 "object_config.json") {  // was phys_properties.json
@@ -29,7 +33,7 @@ class ObjectAttributesManager
 
   void setAssetAttributesManager(
       AssetAttributesManager::cptr assetAttributesMgr) {
-    assetAttributesMgr_ = assetAttributesMgr;
+    assetAttributesMgr_ = std::move(assetAttributesMgr);
     // Create default primitive-based object attributess
     createDefaultPrimBasedAttributesTemplates();
   }

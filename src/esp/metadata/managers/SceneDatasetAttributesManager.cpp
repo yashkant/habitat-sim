@@ -63,20 +63,47 @@ void SceneDatasetAttributesManager::setValsFromJSONDoc(
   readDatasetJSONCell(dsDir, "light_setups", jsonConfig,
                       dsAttribs->getLightLayoutAttributesManager());
 
-  // process scene instances - implement handling scene instances TODO
+  // process scene instances - implement handling scene instances
   readDatasetJSONCell(dsDir, "scene_instances", jsonConfig,
                       dsAttribs->getSceneAttributesManager());
 
   // process navmesh instances
-  io::jsonIntoVal<std::map<std::string, std::string>>(
-      jsonConfig, "navmesh_instances", dsAttribs->editNavmeshMap());
+  loadAndValidateMap(dsDir, "navmesh_instances", jsonConfig,
+                     dsAttribs->editNavmeshMap());
 
   // process semantic scene descriptor instances
-  io::jsonIntoVal<std::map<std::string, std::string>>(
-      jsonConfig, "semantic_scene_descriptor_instances",
-      dsAttribs->editSemanticSceneDescrMap());
+  loadAndValidateMap(dsDir, "semantic_scene_descriptor_instances", jsonConfig,
+                     dsAttribs->editSemanticSceneDescrMap());
 
 }  // SceneDatasetAttributesManager::setValsFromJSONDoc
+
+void SceneDatasetAttributesManager::loadAndValidateMap(
+    const std::string& dsDir,
+    const std::string& jsonTag,
+    const io::JsonGenericValue& jsonConfig,
+    std::map<std::string, std::string>& map) {
+  // load values into map
+  io::readMember<std::map<std::string, std::string>>(jsonConfig,
+                                                     jsonTag.c_str(), map);
+
+  // now verify that all entries in map exist.  If not replace entry with
+  // dsDir-prepended entry
+  for (std::pair<const std::string, std::string>& entry : map) {
+    const std::string loc = entry.second;
+    if (!Cr::Utility::Directory::exists(loc)) {
+      std::string newLoc = Cr::Utility::Directory::join(dsDir, loc);
+      if (!Cr::Utility::Directory::exists(newLoc)) {
+        LOG(WARNING) << "SceneDatasetAttributesManager::loadAndValidateMap : "
+                     << jsonTag << " Value : " << loc
+                     << " not found on disk as absolute path or relative to "
+                     << dsDir;
+      } else {
+        // replace value with dataset-augmented absolute path
+        map[entry.first] = newLoc;
+      }
+    }  // loc does not exist
+  }    // for each loc
+}  // SceneDatasetAttributesManager::loadAndValidateMap
 
 // using type deduction
 template <typename U>
@@ -198,7 +225,7 @@ void SceneDatasetAttributesManager::readDatasetConfigsJSONCell(
   std::string newTemplateHandle = "";
   std::string newTemplateSrcDir = "";
   // try to find original file name for attributes
-  if (io::jsonIntoVal<std::string>(jCell, "original_file", originalFile)) {
+  if (io::readMember<std::string>(jCell, "original_file", originalFile)) {
     // verify that a template with this field as the original file was loaded.
     std::vector<std::string> handles =
         attrMgr->getObjectHandlesBySubstring(originalFile, true);
@@ -216,8 +243,8 @@ void SceneDatasetAttributesManager::readDatasetConfigsJSONCell(
   }
 
   // try to find new template name for attributes
-  if (io::jsonIntoVal<std::string>(jCell, "template_handle",
-                                   newTemplateHandle)) {
+  if (io::readMember<std::string>(jCell, "template_handle",
+                                  newTemplateHandle)) {
     // if a new template handle has been specified, then this is a valid
     // configuration cell only if either an original to copy from or a source
     // directory for this template's new assets is specified.
@@ -294,7 +321,7 @@ void SceneDatasetAttributesManager::readDatasetConfigsJSONCell(
     // register object
     attrMgr->registerObject(attr, regHandle);
   }  // if original filename was specified else
-}  // namespace managers
+}  // SceneDatasetAttributesManager::readDatasetConfigsJSONCell
 
 int SceneDatasetAttributesManager::registerObjectFinalize(
     attributes::SceneDatasetAttributes::ptr SceneDatasetAttributes,

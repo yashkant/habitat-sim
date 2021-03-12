@@ -23,6 +23,7 @@
 #include <Magnum/MeshTools/Compile.h>
 #include <Magnum/MeshTools/Transform.h>
 #include <Magnum/SceneGraph/MatrixTransformation3D.h>
+#include <Magnum/Trade/Trade.h>
 
 #include "Asset.h"
 #include "BaseMesh.h"
@@ -30,6 +31,7 @@
 #include "GenericMeshData.h"
 #include "MeshData.h"
 #include "MeshMetaData.h"
+#include "RenderAssetInstanceCreationInfo.h"
 #include "esp/gfx/Drawable.h"
 #include "esp/gfx/DrawableGroup.h"
 #include "esp/gfx/MaterialData.h"
@@ -41,11 +43,14 @@
 #include "esp/metadata/MetadataMediator.h"
 #include "esp/metadata/attributes/AttributesBase.h"
 
+#ifdef ESP_BUILD_WITH_VHACD
+#include <VHACD.h>
+#endif
+
 // forward declarations
 namespace Magnum {
 namespace Trade {
 class AbstractImporter;
-class AbstractShaderProgram;
 class PhongMaterialData;
 }  // namespace Trade
 }  // namespace Magnum
@@ -55,7 +60,10 @@ namespace Mn = Magnum;
 namespace esp {
 namespace gfx {
 class Drawable;
+namespace replay {
+class Recorder;
 }
+}  // namespace gfx
 namespace scene {
 struct SceneConfiguration;
 }
@@ -80,33 +88,21 @@ class ResourceManager {
   /** @brief Convenience typedef for Importer class */
   using Importer = Mn::Trade::AbstractImporter;
 
+#ifdef ESP_BUILD_WITH_VHACD
   /**
-   * @brief The @ref ShaderManager key for @ref LightInfo which has no lights
+   * @brief Simple struct interface for creating and managing VHACD parameters.
+   * These parameters are passed into VHACD and specify how convex hull
+   * decomposition is ran.
    */
-  static constexpr char NO_LIGHT_KEY[] = "no_lights";
+  struct VHACDParameters : VHACD::IVHACD::Parameters {
+    VHACDParameters() {
+      m_oclAcceleration = false;  // OCL Acceleration does not work on VHACD
+    }
+    ESP_SMART_POINTERS(VHACDParameters)
+  };
 
-  /**
-   *@brief The @ref ShaderManager key for the default @ref LightInfo
-   */
-  static constexpr char DEFAULT_LIGHTING_KEY[] = "";
-
-  /**
-   *@brief The @ref ShaderManager key for the default @ref MaterialInfo
-   */
-  static constexpr char DEFAULT_MATERIAL_KEY[] = "";
-
-  /**
-   *@brief The @ref ShaderManager key for full ambient white @ref MaterialInfo
-   *used for primitive wire-meshes
-   */
-  static constexpr char WHITE_MATERIAL_KEY[] = "ambient_white";
-
-  /**
-   *@brief The @ref ShaderManager key for @ref MaterialInfo with per-vertex
-   * object ID
-   */
-  static constexpr char PER_VERTEX_OBJECT_ID_MATERIAL_KEY[] =
-      "per_vertex_object_id";
+  VHACD::IVHACD* interfaceVHACD;
+#endif
 
   /**
    * @brief Flag
@@ -130,7 +126,7 @@ class ResourceManager {
                            Flags flags = {});
 
   /** @brief Destructor */
-  ~ResourceManager() {}
+  ~ResourceManager();
 
   /**
    * @brief This function will build the various @ref Importers used by the
@@ -180,6 +176,10 @@ class ResourceManager {
    * made, its activeID should be pushed onto vector
    * @param createSemanticMesh If the semantic mesh should be created, based on
    * @ref SimulatorConfiguration
+   * @param forceSeparateSemanticSceneGraph Force creation of a separate
+   * semantic scene graph, even when no semantic mesh is loaded for the stage.
+   * This is required to support playback of any replay that includes a
+   * semantic-only render asset instance.
    * @return Whether or not the scene load succeeded.
    */
   bool loadStage(
@@ -187,7 +187,8 @@ class ResourceManager {
       const std::shared_ptr<physics::PhysicsManager>& _physicsManager,
       esp::scene::SceneManager* sceneManagerPtr,
       std::vector<int>& activeSceneIDs,
-      bool createSemanticMesh);
+      bool createSemanticMesh,
+      bool forceSeparateSemanticSceneGraph = false);
 
   /**
    * @brief Construct scene collision mesh group based on name and type of
@@ -273,10 +274,10 @@ class ResourceManager {
   /**
    * @brief Set a reference to the current @ref metadataMediator_.  Perform any
    * initialization that may be required when @ref metadataMediator_ is changed.
-   * @param _MM a reference to the new @ref metadataMediator_.
+   * @param MM a reference to the new @ref metadataMediator_.
    */
-  void setMetadataMediator(metadata::MetadataMediator::ptr _MM) {
-    metadataMediator_ = _MM;
+  void setMetadataMediator(metadata::MetadataMediator::ptr MM) {
+    metadataMediator_ = std::move(MM);
   }
 
   /**
@@ -288,8 +289,8 @@ class ResourceManager {
    * @return The transformation matrix mapping from the original state to
    * its current state.
    */
-  const Mn::Matrix4& getMeshTransformation(const size_t meshIndex) const {
-    return meshes_[meshIndex]->meshTransform_;
+  const Mn::Matrix4& getMeshTransformation(const int meshIndex) const {
+    return meshes_.at(meshIndex)->meshTransform_;
   }
 
   /**
@@ -340,45 +341,44 @@ class ResourceManager {
    * @return The unified @ref MeshData object for the asset.
    */
   std::unique_ptr<MeshData> createJoinedCollisionMesh(
-      const std::string& filename);
+      const std::string& filename) const;
 
   /**
-   * @brief Add an object from a specified object template handle to the
-   * specified @ref DrawableGroup as a child of the specified @ref
-   * scene::SceneNode if provided.
+   * @brief Converts a MeshMetaData into a obj file.
    *
-   * If the attributes specified by objTemplateID exists in @ref
-   * esp::metadata::managers::ObjectAttributesManager::objectLibrary_, and both
-   * parent and drawables are specified, than an object referenced by that key
-   * is added to the scene.
-   * @param objTemplateLibID The ID of the object attributes in the @ref
-   * esp::metadata::managers::ObjectAttributesManager::objectLibrary_.  This is
-   * expected to exist
-   * @param parent The @ref scene::SceneNode of which the object will be a
-   * child.
-   * @param drawables The @ref DrawableGroup with which the object @ref
-   * gfx::Drawable will be rendered.
-   * @param lightSetupKey The @ref LightSetup key that will be used
-   * for the added component.
-   * @param[out] visNodeCache Cache for pointers to all nodes created as the
-   * result of this process.
+   * @param filename The MeshMetaData filename to be converted to obj.
+   * @param new_filename The name of the file that will be created.
+   * @param filepath The file path, including new file name, for the obj file.
    */
-  void addObjectToDrawables(int objTemplateLibID,
-                            scene::SceneNode* parent,
-                            DrawableGroup* drawables,
-                            std::vector<scene::SceneNode*>& visNodeCache,
-                            const Mn::ResourceKey& lightSetupKey =
-                                Mn::ResourceKey{DEFAULT_LIGHTING_KEY}) {
-    if (objTemplateLibID != ID_UNDEFINED) {
-      const std::string& objTemplateHandleName =
-          metadataMediator_->getObjectAttributesManager()->getObjectHandleByID(
-              objTemplateLibID);
+  bool outputMeshMetaDataToObj(const std::string& filename,
+                               const std::string& new_filename,
+                               const std::string& filepath) const;
 
-      addObjectToDrawables(objTemplateHandleName, parent, drawables,
-                           visNodeCache, lightSetupKey);
-    }  // else objTemplateID does not exist - shouldn't happen
-  }    // addObjectToDrawables
+  /**
+   * @brief Returns the number of resources registered under a given resource
+   * name.
+   *
+   * @param resourceName The name of the resource.
+   */
+  bool isAssetDataRegistered(const std::string& resourceName) const;
 
+#ifdef ESP_BUILD_WITH_VHACD
+  /**
+   * @brief Runs convex hull decomposition on a specified file.
+   *
+   * @param filename The MeshMetaData filename to be converted.
+   * @param chdFilename The new filename for the chd collision mesh.
+   * @param params VHACD params that specify resolution, vertices per convex
+   * hull, etc.
+   * @param saveChdToObj Specifies whether or not to save the newly created
+   * convex hull asset to an obj file.
+   */
+  void createConvexHullDecomposition(
+      const std::string& filename,
+      const std::string& chdFilename,
+      const VHACDParameters& params = VHACDParameters(),
+      const bool saveChdToObj = false);
+#endif
   /**
    * @brief Add an object from a specified object template handle to the
    * specified @ref DrawableGroup as a child of the specified @ref
@@ -388,9 +388,8 @@ class ResourceManager {
    * esp::metadata::managers::ObjectAttributesManager::objectLibrary_, and both
    * parent and drawables are specified, than an object referenced by that key
    * is added to the scene.
-   * @param objTemplateHandle The key of the attributes in the @ref  to parse
-   * and load.  The attributes are expected to exist but will be created (in the
-   * case of synthesized objects) if it does not.
+   * @param ObjectAttributes The attributes used to create the object being
+   * added.
    * @param parent The @ref scene::SceneNode of which the object will be a
    * child.
    * @param drawables The @ref DrawableGroup with which the object @ref
@@ -400,12 +399,12 @@ class ResourceManager {
    * @param[out] visNodeCache Cache for pointers to all nodes created as the
    * result of this process.
    */
-  void addObjectToDrawables(const std::string& objTemplateHandle,
-                            scene::SceneNode* parent,
-                            DrawableGroup* drawables,
-                            std::vector<scene::SceneNode*>& visNodeCache,
-                            const Mn::ResourceKey& lightSetupKey =
-                                Mn::ResourceKey{DEFAULT_LIGHTING_KEY});
+  void addObjectToDrawables(
+      const metadata::attributes::ObjectAttributes::ptr& ObjectAttributes,
+      scene::SceneNode* parent,
+      DrawableGroup* drawables,
+      std::vector<scene::SceneNode*>& visNodeCache,
+      const std::string& lightSetupKey = DEFAULT_LIGHTING_KEY);
 
   /**
    * @brief Create a new drawable primitive attached to the desired @ref
@@ -430,7 +429,7 @@ class ResourceManager {
   void removePrimitiveMesh(int primitiveID);
 
   /**
-   * @brief generate a new primitive mesh asset for the NavMesh loaded in the
+   * @brief Generate a new primitive mesh asset for the NavMesh loaded in the
    * provided PathFinder object.
    *
    * If parent and drawables are provided, create the Drawable and render the
@@ -444,6 +443,28 @@ class ResourceManager {
   int loadNavMeshVisualization(esp::nav::PathFinder& pathFinder,
                                scene::SceneNode* parent,
                                DrawableGroup* drawables);
+
+  /**
+   * @brief Generate a tube following the passed trajectory of points.
+   * @param trajVisName The name to use for the trajectory visualization mesh.
+   * @param pts The points of a trajectory, in order
+   * @param numSegments The number of the segments around the circumference of
+   * the tube. Must be greater than or equal to 3.
+   * @param radius The radius of the tube.
+   * @param color Color for trajectory tube.
+   * @param smooth Whether to smooth the points in the trajectory or not
+   * @param numInterp The number of interpolations between each trajectory
+   * point, if smoothing.
+   * @return Whether the process was a success or not
+   */
+  bool buildTrajectoryVisualization(const std::string& trajVisName,
+                                    const std::vector<Mn::Vector3>& pts,
+                                    int numSegments = 3,
+                                    float radius = .001,
+                                    const Magnum::Color4& color = {0.9, 0.1,
+                                                                   0.1, 1.0},
+                                    bool smooth = false,
+                                    int numInterp = 10);
 
   /**
    * @brief Build a configuration frame from scene or object attributes values
@@ -463,6 +484,31 @@ class ResourceManager {
    * for rendering. Textures will not be loaded if this is false.
    */
   inline void setRequiresTextures(bool newVal) { requiresTextures_ = newVal; }
+
+  /**
+   * @brief Set a replay recorder so that ResourceManager can notify it about
+   * render assets.
+   */
+  void setRecorder(
+      const std::shared_ptr<gfx::replay::Recorder>& gfxReplayRecorder) {
+    gfxReplayRecorder_ = gfxReplayRecorder;
+  }
+
+  /**
+   * @brief Load a render asset (if not already loaded) and create a render
+   * asset instance.
+   *
+   * @param assetInfo the render asset to load
+   * @param creation How to create the instance
+   * @param sceneManagerPtr Info about the scene graph(s). See loadStage.
+   * @param activeSceneIDs Info about the scene graph(s). See loadStage.
+   * @return the root node of the instance, or nullptr (if the load failed)
+   */
+  scene::SceneNode* loadAndCreateRenderAssetInstance(
+      const AssetInfo& assetInfo,
+      const RenderAssetInstanceCreationInfo& creation,
+      esp::scene::SceneManager* sceneManagerPtr,
+      const std::vector<int>& activeSceneIDs);
 
  private:
   /**
@@ -508,7 +554,7 @@ class ResourceManager {
    *
    * meshID:
    * -) for non-ptex mesh:
-   * meshID is the global index into meshes_.
+   * meshID is the global key into meshes_.
    * meshes_[meshID] is the BaseMesh corresponding to the drawable;
    *
    * -) for ptex mesh:
@@ -516,11 +562,20 @@ class ResourceManager {
    */
   struct StaticDrawableInfo {
     esp::scene::SceneNode& node;
-    uint32_t meshID;
+    int meshID;
   };
 
   //======== Scene Functions ========
 
+  /**
+   * @brief Determines if passed type is a general mesh data.
+   * @param type The type to verify.
+   * @return Whether it is a General
+   */
+  inline bool isRenderAssetGeneral(AssetType type) {
+    return type == AssetType::MP3D_MESH || type == AssetType::UNKNOWN ||
+           type == AssetType::SUNCG_OBJECT;
+  }
   /**
    * @brief Recursive contruction of scene nodes for an asset.
    *
@@ -592,7 +647,7 @@ class ResourceManager {
    * @brief Recursively build a unified @ref MeshData from loaded assets via a
    * tree of @ref MeshTransformNode.
    *
-   * @param mesh The @ref MeshData being constructed.
+   * @param[in,out] mesh The @ref MeshData being constructed.
    * @param metaData The @ref MeshMetaData for the object heirarchy being
    * joined.
    * @param node The current @ref MeshTransformNode in the recursion.
@@ -602,7 +657,7 @@ class ResourceManager {
   void joinHeirarchy(MeshData& mesh,
                      const MeshMetaData& metaData,
                      const MeshTransformNode& node,
-                     const Mn::Matrix4& transformFromParentToWorld);
+                     const Mn::Matrix4& transformFromParentToWorld) const;
 
   /**
    * @brief Load materials from importer into assets, and update metaData for
@@ -637,7 +692,7 @@ class ResourceManager {
    */
   gfx::PhongMaterialData::uptr buildPhongShadedMaterialData(
       const Mn::Trade::PhongMaterialData& material,
-      int textureBaseIndex);
+      int textureBaseIndex) const;
 
   /**
    * @brief Build a @ref PbrMaterialData for use with PBR shading
@@ -649,7 +704,7 @@ class ResourceManager {
    */
   gfx::PbrMaterialData::uptr buildPbrShadedMaterialData(
       const Mn::Trade::PbrMetallicRoughnessMaterialData& material,
-      int textureBaseIndex);
+      int textureBaseIndex) const;
 
   /**
    * @brief Load a mesh describing some scene asset based on the passed
@@ -658,24 +713,21 @@ class ResourceManager {
    * If both parent and drawables are provided, add the mesh to the
    * scene graph for rendering.
    * @param info The @ref AssetInfo for the mesh, already parsed from a file.
+   * @param creation How to instance the render asset, or nullptr if not
+   * instancing.
    * @param parent The @ref scene::SceneNode to which the mesh will be added
-   * as a child.
+   * as a child. See also creation->isRGBD and creation->isSemantic. nullptr if
+   * not instancing.
    * @param drawables The @ref DrawableGroup with which the mesh will be
-   * rendered.
-   * @param computeAbsoluteAABBs Whether absolute bounding boxes should be
-   * computed
+   * rendered. See also creation->isRGBD and creation->isSemantic. nullptr if
+   * not instancing.
    * @param splitSemanticMesh Split the semantic mesh by objectID, used for A/B
    * testing
-   * @param lightSetupKey The @ref LightSetup key that will be used
-   * for the loaded asset.
    */
   bool loadStageInternal(const AssetInfo& info,
-                         scene::SceneNode* parent = nullptr,
-                         DrawableGroup* drawables = nullptr,
-                         bool computeAbsoluteAABBs = false,
-                         bool splitSemanticMesh = true,
-                         const Mn::ResourceKey& lightSetupKey = Mn::ResourceKey{
-                             NO_LIGHT_KEY});
+                         const RenderAssetInstanceCreationInfo* creation,
+                         scene::SceneNode* parent,
+                         DrawableGroup* drawables);
 
   /**
    * @brief Builds the appropriate collision mesh groups for the passed
@@ -705,61 +757,68 @@ class ResourceManager {
       bool createSemanticInfo);
 
   /**
-   * @brief Load a PTex mesh into assets from a file and add it to the scene
-   * graph for rendering.
-   * @return true if the mesh is loaded, otherwise false
-   *
-   * @param info The @ref AssetInfo for the mesh, already parsed from a
-   * file.
-   * @param parent The @ref scene::SceneNode to which the mesh will be added
-   * as a child.
-   * @param drawables The @ref DrawableGroup with which the mesh will be
-   * rendered.
+   * @brief Load a render asset so it can be instanced. See also
+   * createRenderAssetInstance.
    */
-  bool loadPTexMeshData(const AssetInfo& info,
-                        scene::SceneNode* parent,
-                        DrawableGroup* drawables);
+  bool loadRenderAsset(const AssetInfo& info);
 
   /**
-   * @brief Load an instance mesh (e.g. Matterport reconstruction) into assets
-   * from a file and add it to the scene graph for rendering.
-   *
-   * @param info The @ref AssetInfo for the mesh, already parsed from a file.
-   * @param parent The @ref scene::SceneNode to which the mesh will be added
-   * as a child.
-   * @param drawables The @ref DrawableGroup with which the mesh will be
-   * rendered.
-   * @param computeAbsoluteAABBs Whether absolute bounding boxes should be
-   * computed
-   * @param splitSemanticMesh Split the semantic mesh by objectID
+   * @brief PTex Mesh backend for loadRenderAsset
    */
-  bool loadInstanceMeshData(const AssetInfo& info,
-                            scene::SceneNode* parent,
-                            DrawableGroup* drawables,
-                            bool computeAbsoluteAABBs,
-                            bool splitSemanticMesh);  // was default true
+  bool loadRenderAssetPTex(const AssetInfo& info);
 
   /**
-   * @brief Load a mesh (e.g. gltf) into assets from a file.
-   *
-   * If both parent and drawables are provided, add the mesh to the
-   * scene graph for rendering.
-   * @param info The @ref AssetInfo for the mesh, already parsed from a file.
-   * @param parent The @ref scene::SceneNode to which the mesh will be added
-   * as a child.
-   * @param drawables The @ref DrawableGroup with which the mesh will be
-   * rendered.
-   * @param computeAbsoluteAABBs Whether absolute bounding boxes should be
-   * computed
-   * @param lightSetupKey The @ref LightSetup key that will be used
-   * for the loaded asset.
+   * @brief Instance Mesh backend for loadRenderAsset
    */
-  bool loadGeneralMeshData(
-      const AssetInfo& info,
-      scene::SceneNode* parent = nullptr,
-      DrawableGroup* drawables = nullptr,
-      bool computeAbsoluteAABBs = false,
-      const Mn::ResourceKey& lightSetupKey = Mn::ResourceKey{NO_LIGHT_KEY});
+  bool loadRenderAssetIMesh(const AssetInfo& info);
+
+  /**
+   * @brief General Mesh backend for loadRenderAsset
+   */
+  bool loadRenderAssetGeneral(const AssetInfo& info);
+
+  /**
+   * @brief Create a render asset instance.
+   *
+   * @param creation Controls how the instance is created.
+   * @param parent The @ref scene::SceneNode to which the instance will be added
+   * as a child. See also creation.isRGBD and isSemantic.
+   * @param drawables The @ref DrawableGroup with which the instance will be
+   * rendered. See also creation.isRGBD and isSemantic.
+   * @param[out] visNodeCache Optional; cache for pointers to all nodes created
+   * as the result of this process.
+   */
+  scene::SceneNode* createRenderAssetInstance(
+      const RenderAssetInstanceCreationInfo& creation,
+      scene::SceneNode* parent,
+      DrawableGroup* drawables,
+      std::vector<scene::SceneNode*>* visNodeCache = nullptr);
+
+  /**
+   * @brief PTex Mesh backend for createRenderAssetInstance
+   */
+  scene::SceneNode* createRenderAssetInstancePTex(
+      const RenderAssetInstanceCreationInfo& creation,
+      scene::SceneNode* parent,
+      DrawableGroup* drawables);
+
+  /**
+   * @brief Instance Mesh backend for createRenderAssetInstance
+   */
+  scene::SceneNode* createRenderAssetInstanceIMesh(
+      const RenderAssetInstanceCreationInfo& creation,
+      scene::SceneNode* parent,
+      DrawableGroup* drawables);
+
+  /**
+   * @brief backend for both General Mesh and Primitive Mesh, for
+   * createRenderAssetInstance
+   */
+  scene::SceneNode* createRenderAssetInstanceGeneralPrimitive(
+      const RenderAssetInstanceCreationInfo& creation,
+      scene::SceneNode* parent,
+      DrawableGroup* drawables,
+      std::vector<scene::SceneNode*>* userVisNodeCache);
 
   /**
    * @brief Load a SUNCG mesh into assets from a file. !Deprecated! TODO:
@@ -850,8 +909,7 @@ class ResourceManager {
    *
    * Add this drawable to the @ref DrawableGroup if provided.
    * @param shaderType Indentifies the desired shader program for rendering
-   * the
-   * @ref gfx::Drawable.
+   * the @ref gfx::Drawable.
    * @param mesh The render mesh.
    * @param meshAttributeFlags flags for the attributes of the render mesh
    * @param node The @ref scene::SceneNode to which the drawable will be
@@ -884,14 +942,24 @@ class ResourceManager {
   // thus we can avoiding duplicated loading
 
   /**
+   * @brief The next available unique ID for loaded meshes
+   */
+  int nextMeshID_ = 0;
+
+  /**
    * @brief The mesh data for loaded assets.
    */
-  std::vector<std::shared_ptr<BaseMesh>> meshes_;
+  std::map<int, std::shared_ptr<BaseMesh>> meshes_;
+
+  /**
+   * @brief The next available unique ID for loaded textures
+   */
+  int nextTextureID_ = 0;
 
   /**
    * @brief The texture data for loaded assets.
    */
-  std::vector<std::shared_ptr<Mn::GL::Texture2D>> textures_;
+  std::map<int, std::shared_ptr<Mn::GL::Texture2D>> textures_;
 
   /**
    * @brief The next available unique ID for loaded materials
@@ -956,7 +1024,12 @@ class ResourceManager {
    * @brief Flag to load textures of meshes
    */
   bool requiresTextures_ = true;
-};
+
+  /**
+   * @brief See @ref setRecorder.
+   */
+  std::shared_ptr<esp::gfx::replay::Recorder> gfxReplayRecorder_;
+};  // class ResourceManager
 
 CORRADE_ENUMSET_OPERATORS(ResourceManager::Flags)
 

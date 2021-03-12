@@ -11,6 +11,7 @@
 #include <Magnum/SceneGraph/Drawable.h>
 #include "esp/gfx/Drawable.h"
 #include "esp/gfx/DrawableGroup.h"
+#include "esp/scene/SceneGraph.h"
 
 namespace Mn = Magnum;
 namespace Cr = Corrade;
@@ -54,26 +55,56 @@ RenderCamera::RenderCamera(scene::SceneNode& node) : MagnumCamera{node} {
 }
 
 RenderCamera::RenderCamera(scene::SceneNode& node,
+                           const Mn::Vector3& eye,
+                           const Mn::Vector3& target,
+                           const Mn::Vector3& up)
+
+    : RenderCamera(node) {
+  // once it is attached, set the transformation
+  resetViewingParameters(eye, target, up);
+}
+
+RenderCamera::RenderCamera(scene::SceneNode& node,
                            const vec3f& eye,
                            const vec3f& target,
                            const vec3f& up)
-    : RenderCamera(node) {
-  // once it is attached, set the transformation
-  node.setTransformation(Mn::Matrix4::lookAt(
-      Mn::Vector3{eye}, Mn::Vector3{target}, Mn::Vector3{up}));
+    : RenderCamera(node,
+                   Mn::Vector3{eye},
+                   Mn::Vector3{target},
+                   Mn::Vector3{up}) {}
+
+RenderCamera& RenderCamera::resetViewingParameters(const Mn::Vector3& eye,
+                                                   const Mn::Vector3& target,
+                                                   const Mn::Vector3& up) {
+  this->node().setTransformation(Mn::Matrix4::lookAt(eye, target, up));
+  return *this;
+}
+
+bool RenderCamera::isInSceneGraph(const scene::SceneGraph& sceneGraph) {
+  return (this->node().scene() == sceneGraph.getRootNode().parent());
 }
 
 RenderCamera& RenderCamera::setProjectionMatrix(int width,
                                                 int height,
                                                 float znear,
                                                 float zfar,
-                                                float hfov) {
+                                                Mn::Deg hfov) {
   const float aspectRatio = static_cast<float>(width) / height;
-  MagnumCamera::setProjectionMatrix(
-      Mn::Matrix4::perspectiveProjection(Mn::Deg{hfov}, aspectRatio, znear,
-                                         zfar))
-      .setViewport(Magnum::Vector2i(width, height));
-  return *this;
+  auto projMat =
+      Mn::Matrix4::perspectiveProjection(hfov, aspectRatio, znear, zfar);
+  return setProjectionMatrix(width, height, projMat);
+}
+
+RenderCamera& RenderCamera::setOrthoProjectionMatrix(int width,
+                                                     int height,
+                                                     float znear,
+                                                     float zfar,
+                                                     float scale) {
+  auto size = Mn::Vector2{width / (1.0f * height), 1.0f};
+  size /= scale;
+  auto orthoMat = Mn::Matrix4::orthographicProjection(size, znear, zfar);
+
+  return setProjectionMatrix(width, height, orthoMat);
 }
 
 size_t RenderCamera::cull(
@@ -89,21 +120,17 @@ size_t RenderCamera::cull(
                           Mn::Matrix4>& a) {
         // obtain the absolute aabb
         auto& node = static_cast<scene::SceneNode&>(a.first.get().object());
-        Corrade::Containers::Optional<Mn::Range3D> aabb =
-            node.getAbsoluteAABB();
-        if (aabb) {
-          // if it has an absolute aabb, it is a static mesh
-          Cr::Containers::Optional<int> culledPlane =
-              rangeFrustum(*aabb, frustum, node.getFrustumPlaneIndex());
-          if (culledPlane) {
-            node.setFrustumPlaneIndex(*culledPlane);
-          }
-          // if it has value, it means the aabb is culled
-          return (culledPlane != Cr::Containers::NullOpt);
-        } else {
-          // keep the drawable if its node does not have an absolute AABB
-          return false;
+        // This updates the AABB for dynamic objects if needed
+        node.setClean();
+        const Mn::Range3D& aabb = node.getAbsoluteAABB();
+
+        Cr::Containers::Optional<int> culledPlane =
+            rangeFrustum(aabb, frustum, node.getFrustumPlaneIndex());
+        if (culledPlane) {
+          node.setFrustumPlaneIndex(*culledPlane);
         }
+        // if it has value, it means the aabb is culled
+        return (culledPlane != Cr::Containers::NullOpt);
       });
 
   return (newEndIter - drawableTransforms.begin());

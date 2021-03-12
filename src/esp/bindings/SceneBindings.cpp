@@ -67,8 +67,12 @@ void initSceneBindings(py::module& m) {
       .def_property_readonly(
           "mesh_bb", &SceneNode::getMeshBB,
           R"(The axis aligned bounding box of the mesh drawables attached to this node.)")
-      .def_property_readonly("absolute_translation",
-                             &SceneNode::absoluteTranslation);
+      .def_property_readonly(
+          "absolute_translation",
+          py::overload_cast<>(&SceneNode::absoluteTranslation))
+      .def_property_readonly(
+          "absolute_translation",
+          py::overload_cast<>(&SceneNode::absoluteTranslation, py::const_));
 
   py::class_<SceneGraph>(m, "SceneGraph")
       .def(py::init())
@@ -86,20 +90,6 @@ void initSceneBindings(py::module& m) {
 
             User can specify transformation of the root node w.r.t. the world
             frame. PYTHON DOES NOT GET OWNERSHIP)",
-           pybind11::return_value_policy::reference)
-      .def("set_default_render_camera_parameters",
-           &SceneGraph::setDefaultRenderCamera,
-           R"(
-            Set transformation and the projection matrix to the default render camera.
-
-            The camera will have the same absolute transformation as the target
-            scene node after the operation.)",
-           "targetSceneNode"_a)
-      .def("get_default_render_camera", &SceneGraph::getDefaultRenderCamera,
-           R"(
-            Get the default camera stored in scene graph for rendering.
-
-            PYTHON DOES NOT GET OWNERSHIP)",
            pybind11::return_value_policy::reference);
 
   // ==== SceneManager ====

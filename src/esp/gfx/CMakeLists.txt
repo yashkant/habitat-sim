@@ -18,8 +18,19 @@ set(
   magnum.h
   RenderCamera.cpp
   RenderCamera.h
+  CubeMapCamera.cpp
+  CubeMapCamera.h
+  CubeMap.cpp
+  CubeMap.h
   Renderer.cpp
   Renderer.h
+  replay/Keyframe.h
+  replay/Player.cpp
+  replay/Player.h
+  replay/Recorder.cpp
+  replay/Recorder.h
+  replay/ReplayManager.h
+  replay/ReplayManager.cpp
   WindowlessContext.cpp
   WindowlessContext.h
   RenderTarget.cpp

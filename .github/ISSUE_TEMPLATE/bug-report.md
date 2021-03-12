@@ -4,14 +4,18 @@ about: Submit a bug report to help us improve Habitat
 
 ---
 
+## Habitat-Sim version
+vx.x.x or master?
+
+Habitat is under active development, and we advise users to restrict themselves to stable releases. Are you using the latest [release version](https://github.com/facebookresearch/habitat-sim/releases) of Habitat-Sim? The bug you are about to report may already be fixed in the latest version.
+
+Master branch contains 'bleeding edge' code, but we do appreciate bug reports for it!
+
 ## 🐛 Bug
 
 <!-- A clear and concise description of what the bug is. -->
 
-## Command
-`# command that you run`
-
-## To Reproduce
+## Steps to Reproduce
 
 Steps to reproduce the behavior:
 
@@ -20,6 +24,8 @@ Steps to reproduce the behavior:
 1.
 2.
 3.
+
+ Please note that without a minimal working example to reproduce the bug, we may not be able to help you.
 
 <!-- If you have a code sample, error messages, stack traces, please provide it here as well -->
 

@@ -17,7 +17,8 @@ enum class AssetType;
 namespace metadata {
 namespace managers {
 class StageAttributesManager
-    : public AbstractObjectAttributesManager<attributes::StageAttributes> {
+    : public AbstractObjectAttributesManager<attributes::StageAttributes,
+                                             core::ManagedObjectAccess::Copy> {
  public:
   StageAttributesManager(
       ObjectAttributesManager::ptr objectAttributesMgr,
@@ -38,19 +39,21 @@ class StageAttributesManager
   void setCurrPhysicsManagerAttributesHandle(const std::string& handle) {
     physicsManagerAttributesHandle_ = handle;
   }
+
   /**
-   * @brief copy current @ref esp::sim::SimulatorConfiguration driven values,
-   * such as file paths, to make them available for stage attributes defaults.
+   * @brief copy current @ref esp::sim::SimulatorConfiguration driven values as
+   * defaults, to make them available for stage attributes initialization.
    *
    * @param lightSetup the config-specified light setup
-   * @param frustrumCulling whether or not (semantic) stage should be
+   * @param frustumCulling whether or not (semantic) stage should be
    * partitioned for culling.
    */
-  void setCurrCfgVals(const std::string& lightSetup, bool frustrumCulling) {
+  void setCurrCfgVals(const std::string& lightSetup, bool frustumCulling) {
     // set lightsetup default from configuration
     cfgLightSetup_ = lightSetup;
-    // set frustrum culling default from configuration
-    cfgFrustrumCulling_ = frustrumCulling;
+    // set frustum culling default from configuration
+    cfgFrustumCulling_ = frustumCulling;
+
   }  // StageAttributesManager::setCurrCfgVals
 
   /**
@@ -191,11 +194,11 @@ class StageAttributesManager
   std::string cfgLightSetup_;
 
   /**
-   * @brief Current frustrum culling setting based on current @ref
+   * @brief Current frustum culling setting based on current @ref
    * esp::sim::SimulatorConfiguration settings. Potentially overridden by
    * scene-specific json.
    */
-  bool cfgFrustrumCulling_ = false;
+  bool cfgFrustumCulling_ = false;
 
   /**
    * @brief Name of currently used physicsManagerAttributes

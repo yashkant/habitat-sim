@@ -8,7 +8,6 @@
 #include <Magnum/EigenIntegration/Integration.h>
 
 #include "esp/scene/ObjectControls.h"
-#include "esp/sensor/PinholeCamera.h"
 #include "esp/sensor/Sensor.h"
 
 using Magnum::EigenIntegration::cast;
@@ -26,15 +25,7 @@ Agent::Agent(scene::SceneNode& agentNode, const AgentConfiguration& cfg)
       sensors_(),
       controls_(scene::ObjectControls::create()) {
   agentNode.setType(scene::SceneNodeType::AGENT);
-  for (const sensor::SensorSpec::ptr& spec : cfg.sensorSpecifications) {
-    // TODO: this should take type into account to create appropriate
-    // sensor
-
-    auto& sensorNode = agentNode.createChild();
-    sensors_.add(
-        sensor::PinholeCamera::create(sensorNode, spec));  // transformed within
-  }
-}
+}  // Agent::Agent
 
 Agent::~Agent() {
   LOG(INFO) << "Deconstructing Agent";

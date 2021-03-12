@@ -13,6 +13,7 @@
 
 #include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/Renderer.h"
+#include "esp/gfx/replay/ReplayManager.h"
 #include "esp/scene/SemanticScene.h"
 #include "esp/sim/Simulator.h"
 #include "esp/sim/SimulatorConfiguration.h"
@@ -28,7 +29,15 @@ void initSimBindings(py::module& m) {
   py::class_<SimulatorConfiguration, SimulatorConfiguration::ptr>(
       m, "SimulatorConfiguration")
       .def(py::init(&SimulatorConfiguration::create<>))
-      .def_readwrite("scene_id", &SimulatorConfiguration::activeSceneID)
+      .def_readwrite(
+          "scene_dataset_config_file",
+          &SimulatorConfiguration::sceneDatasetConfigFile,
+          R"(The location of the scene dataset configuration file that describes the
+          dataset to be used.)")
+      .def_readwrite(
+          "scene_id", &SimulatorConfiguration::activeSceneName,
+          R"(Either the name of a stage asset or configuration file, or else the name of a scene
+          instance configuration, used to initialize the simulator world.)")
       .def_readwrite("random_seed", &SimulatorConfiguration::randomSeed)
       .def_readwrite("default_agent_id",
                      &SimulatorConfiguration::defaultAgentId)
@@ -39,12 +48,25 @@ void initSimBindings(py::module& m) {
       .def_readwrite("create_renderer", &SimulatorConfiguration::createRenderer)
       .def_readwrite("frustum_culling", &SimulatorConfiguration::frustumCulling)
       .def_readwrite("enable_physics", &SimulatorConfiguration::enablePhysics)
+      .def_readwrite(
+          "enable_gfx_replay_save",
+          &SimulatorConfiguration::enableGfxReplaySave,
+          R"(Enable replay recording. See sim.gfx_replay.save_keyframe.)")
       .def_readwrite("physics_config_file",
                      &SimulatorConfiguration::physicsConfigFile)
+      .def_readwrite(
+          "override_scene_light_defaults",
+          &SimulatorConfiguration::overrideSceneLightDefaults,
+          R"(Override scene lighting setup to use with value specified below.)")
       .def_readwrite("scene_light_setup",
                      &SimulatorConfiguration::sceneLightSetup)
       .def_readwrite("load_semantic_mesh",
                      &SimulatorConfiguration::loadSemanticMesh)
+      .def_readwrite(
+          "force_separate_semantic_scene_graph",
+          &SimulatorConfiguration::forceSeparateSemanticSceneGraph,
+          R"(Required to support playback of any gfx replay that includes a
+          stage with a semantic mesh. Set to false otherwise.)")
       .def_readwrite("requires_textures",
                      &SimulatorConfiguration::requiresTextures)
       .def(py::self == py::self)
@@ -52,7 +74,9 @@ void initSimBindings(py::module& m) {
 
   // ==== Simulator ====
   py::class_<Simulator, Simulator::ptr>(m, "Simulator")
-      .def(py::init<const SimulatorConfiguration&>())
+      // modify constructor to pass MetadataMediator
+      .def(py::init<const SimulatorConfiguration&,
+                    esp::metadata::MetadataMediator::ptr>())
       .def("get_active_scene_graph", &Simulator::getActiveSceneGraph,
            R"(PYTHON DOES NOT GET OWNERSHIP)",
            py::return_value_policy::reference)
@@ -68,6 +92,9 @@ void initSimBindings(py::module& m) {
             Not available for all datasets
             )")
       .def_property_readonly("renderer", &Simulator::getRenderer)
+      .def_property_readonly(
+          "gfx_replay_manager", &Simulator::getGfxReplayManager,
+          R"(Use gfx_replay_manager for replay recording and playback.)")
       .def("seed", &Simulator::seed, "new_seed"_a)
       .def("reconfigure", &Simulator::reconfigure, "configuration"_a)
       .def("reset", &Simulator::reset)
@@ -88,8 +115,14 @@ void initSimBindings(py::module& m) {
           &Simulator::setActiveSceneDatasetName,
           R"(The currently active dataset being used.  Will attempt to load
             configuration files specified if does not already exist.)")
-      /* --- Physics functions --- */
       /* --- Template Manager accessors --- */
+      // We wish a copy of the metadata mediator smart pointer so that we
+      // increment its ref counter
+      .def_property(
+          "metadata_mediator", &Simulator::getMetadataMediator,
+          &Simulator::setMetadataMediator, py::return_value_policy::copy,
+          R"(This construct manages all configuration template managers
+          and the Scene Dataset Configurations)")
       .def("get_asset_template_manager", &Simulator::getAssetAttributesManager,
            pybind11::return_value_policy::reference,
            R"(Get the current dataset's AssetAttributesManager instance
@@ -121,14 +154,12 @@ void initSimBindings(py::module& m) {
       .def(
           "add_object", &Simulator::addObject, "object_lib_id"_a,
           "attachment_node"_a = nullptr,
-          "light_setup_key"_a = assets::ResourceManager::DEFAULT_LIGHTING_KEY,
-          "scene_id"_a = 0,
+          "light_setup_key"_a = DEFAULT_LIGHTING_KEY, "scene_id"_a = 0,
           R"(Instance an object into the scene via a template referenced by library id. Optionally attach the object to an existing SceneNode and assign its initial LightSetup key.)")
       .def(
           "add_object_by_handle", &Simulator::addObjectByHandle,
           "object_lib_handle"_a, "attachment_node"_a = nullptr,
-          "light_setup_key"_a = assets::ResourceManager::DEFAULT_LIGHTING_KEY,
-          "scene_id"_a = 0,
+          "light_setup_key"_a = DEFAULT_LIGHTING_KEY, "scene_id"_a = 0,
           R"(Instance an object into the scene via a template referenced by its handle. Optionally attach the object to an existing SceneNode and assign its initial LightSetup key.)")
       .def("remove_object", &Simulator::removeObject, "object_id"_a,
            "delete_object_node"_a = true, "delete_visual_node"_a = true,
@@ -233,6 +264,16 @@ void initSimBindings(py::module& m) {
           "apply_torque", &Simulator::applyTorque, "torque"_a, "object_id"_a,
           "scene_id"_a = 0,
           R"(Apply torque to an object. Only applies to MotionType::DYNAMIC objects.)")
+      .def("get_object_is_collidable", &Simulator::getObjectIsCollidable,
+           "object_id"_a, R"(Get whether or not an object is collidable.)")
+      .def("set_object_is_collidable", &Simulator::setObjectIsCollidable,
+           "collidable"_a, "object_id"_a,
+           R"(Set whether or not an object is collidable.)")
+      .def("get_stage_is_collidable", &Simulator::getStageIsCollidable,
+           R"(Get whether or not the static stage is collidable.)")
+      .def("set_stage_is_collidable", &Simulator::setStageIsCollidable,
+           "collidable"_a,
+           R"(Set whether or not the static stage is collidable.)")
       .def(
           "contact_test", &Simulator::contactTest, "object_id"_a,
           "scene_id"_a = 0,
@@ -252,12 +293,31 @@ void initSimBindings(py::module& m) {
           "recompute_navmesh", &Simulator::recomputeNavMesh, "pathfinder"_a,
           "navmesh_settings"_a, "include_static_objects"_a = false,
           R"(Recompute the NavMesh for a given PathFinder instance using configured NavMeshSettings. Optionally include all MotionType::STATIC objects in the navigability constraints.)")
+#ifdef ESP_BUILD_WITH_VHACD
+      .def(
+          "apply_convex_hull_decomposition",
+          &Simulator::convexHullDecomposition, "filename"_a,
+          "vhacd_params"_a = assets::ResourceManager::VHACDParameters(),
+          "render_chd_result"_a = false, "save_chd_to_obj"_a = false,
+          R"(Decomposite an object into its constituent convex hulls with specified VHACD parameters.)")
+#endif
+      .def("add_trajectory_object", &Simulator::addTrajectoryObject,
+           "traj_vis_name"_a, "points"_a, "num_segments"_a = 3,
+           "radius"_a = .001, "color"_a = Mn::Color4{0.9, 0.1, 0.1, 1.0},
+           "smooth"_a = false, "num_interpolations"_a = 10,
+           R"(Build a tube visualization around the passed trajectory of points.
+              points : (list of 3-tuples of floats) key point locations to use to create trajectory tube.
+              num_segments : (Integer) the number of segments around the tube to be used to make the visualization.
+              radius : (Float) the radius of the resultant tube.
+              color : (4-tuple of float) the color of the trajectory tube.
+              smooth : (Bool) whether or not to smooth trajectory using a Catmull-Rom spline interpolating spline.
+              num_interpolations : (Integer) the number of interpolation points to find between successive key points.)")
       .def("get_light_setup", &Simulator::getLightSetup,
-           "key"_a = assets::ResourceManager::DEFAULT_LIGHTING_KEY,
+           "key"_a = DEFAULT_LIGHTING_KEY,
            R"(Get a copy of the LightSetup registered with a specific key.)")
       .def(
           "set_light_setup", &Simulator::setLightSetup, "light_setup"_a,
-          "key"_a = assets::ResourceManager::DEFAULT_LIGHTING_KEY,
+          "key"_a = DEFAULT_LIGHTING_KEY,
           R"(Register a LightSetup with a specific key. If a LightSetup is already registered with this key, it will be overriden. All Drawables referencing the key will use the newly registered LightSetup.)")
       .def(
           "set_object_light_setup", &Simulator::setObjectLightSetup,

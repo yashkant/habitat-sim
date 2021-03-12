@@ -6,6 +6,8 @@
 #define ESP_SIM_SIMULATOR_H_
 
 #include <Corrade/Utility/Assert.h>
+
+#include <utility>
 #include "esp/agent/Agent.h"
 #include "esp/assets/ResourceManager.h"
 #include "esp/core/esp.h"
@@ -18,6 +20,7 @@
 #include "esp/physics/RigidObject.h"
 #include "esp/scene/SceneManager.h"
 #include "esp/scene/SceneNode.h"
+#include "esp/sensor/Sensor.h"
 
 #include "SimulatorConfiguration.h"
 
@@ -32,6 +35,9 @@ class SemanticScene;
 }  // namespace scene
 namespace gfx {
 class Renderer;
+namespace replay {
+class ReplayManager;
+}  // namespace replay
 }  // namespace gfx
 }  // namespace esp
 
@@ -39,7 +45,9 @@ namespace esp {
 namespace sim {
 class Simulator {
  public:
-  explicit Simulator(const SimulatorConfiguration& cfg);
+  explicit Simulator(
+      const SimulatorConfiguration& cfg,
+      metadata::MetadataMediator::ptr _metadataMediator = nullptr);
   virtual ~Simulator();
 
   /**
@@ -67,6 +75,10 @@ class Simulator {
 
   scene::SceneGraph& getActiveSceneGraph();
   scene::SceneGraph& getActiveSemanticSceneGraph();
+
+  std::shared_ptr<gfx::replay::ReplayManager> getGfxReplayManager() {
+    return gfxReplayMgr_;
+  }
 
   void saveFrame(const std::string& filename);
 
@@ -179,8 +191,7 @@ class Simulator {
    */
   int addObject(int objectLibId,
                 scene::SceneNode* attachmentNode = nullptr,
-                const std::string& lightSetupKey =
-                    assets::ResourceManager::DEFAULT_LIGHTING_KEY,
+                const std::string& lightSetupKey = DEFAULT_LIGHTING_KEY,
                 int sceneID = 0);
 
   /**
@@ -201,16 +212,15 @@ class Simulator {
    */
   int addObjectByHandle(const std::string& objectLibHandle,
                         scene::SceneNode* attachmentNode = nullptr,
-                        const std::string& lightSetupKey =
-                            assets::ResourceManager::DEFAULT_LIGHTING_KEY,
+                        const std::string& lightSetupKey = DEFAULT_LIGHTING_KEY,
                         int sceneID = 0);
 
   /**
-   * @brief Get a static view of a physics object's template when the object was
-   * instanced.
+   * @brief Get a static view of a physics object's template when the object
+   * was instanced.
    *
-   * Use this to query the object's properties when it was initialized.  Object
-   * pointed at by pointer is const, and can not be modified.
+   * Use this to query the object's properties when it was initialized.
+   * Object pointed at by pointer is const, and can not be modified.
    */
   const metadata::attributes::ObjectAttributes::cptr
   getObjectInitializationTemplate(int objectId, int sceneID = 0) const;
@@ -516,6 +526,46 @@ class Simulator {
   bool contactTest(int objectID, int sceneID = 0);
 
   /**
+   * @brief Set an object to collidable or not.
+   */
+  bool setObjectIsCollidable(bool collidable, const int objectID) {
+    if (sceneHasPhysics(activeSceneID_)) {
+      return physicsManager_->setObjectIsCollidable(objectID, collidable);
+    }
+    return false;
+  };
+
+  /**
+   * @brief Get whether or not an object is collision active.
+   */
+  bool getObjectIsCollidable(const int objectID) {
+    if (sceneHasPhysics(activeSceneID_)) {
+      return physicsManager_->getObjectIsCollidable(objectID);
+    }
+    return false;
+  };
+
+  /**
+   * @brief Set the stage to collidable or not.
+   */
+  bool setStageIsCollidable(bool collidable) {
+    if (sceneHasPhysics(activeSceneID_)) {
+      return physicsManager_->setStageIsCollidable(collidable);
+    }
+    return false;
+  };
+
+  /**
+   * @brief Get whether or not the stage is collision active.
+   */
+  bool getStageIsCollidable() {
+    if (sceneHasPhysics(activeSceneID_)) {
+      return physicsManager_->getStageIsCollidable();
+    }
+    return false;
+  };
+
+  /**
    * @brief Raycast into the collision world of a scene.
    *
    * Note: A default @ref physics::PhysicsManager has no collision world, so
@@ -591,11 +641,97 @@ class Simulator {
    */
   bool isNavMeshVisualizationActive();
 
+  /**
+   * @brief Compute a trajectory visualization for the passed points.
+   * @param trajVisName The name to use for the trajectory visualization
+   * @param pts The points of a trajectory, in order
+   * @param numSegments The number of the segments around the circumference of
+   * the tube. Must be greater than or equal to 3.
+   * @param radius The radius of the tube.
+   * @param color Color for trajectory tube.
+   * @param smooth Whether to smooth the points in the trajectory or not. Will
+   * build a much bigger mesh
+   * @param numInterp The number of interpolations between each trajectory
+   * point, if smoothed
+   * @return The ID of the object created for the visualization
+   */
+  int addTrajectoryObject(const std::string& trajVisName,
+                          const std::vector<Mn::Vector3>& pts,
+                          int numSegments = 3,
+                          float radius = .001,
+                          const Magnum::Color4& color = {0.9, 0.1, 0.1, 1.0},
+                          bool smooth = false,
+                          int numInterp = 10);
+
+  /**
+   * @brief Remove a trajectory visualization by name.
+   * @param trajVisName The name of the trajectory visualization to remove.
+   * @return whether successful or not.
+   */
+  bool removeTrajVisByName(const std::string& trajVisName) {
+    if (trajVisIDByName.count(trajVisName) == 0) {
+      LOG(INFO) << "Simulator::removeTrajVisByName : No trajectory named "
+                << trajVisName << " exists.  Ignoring.";
+      return false;
+    }
+    return removeTrajVisObjectAndAssets(trajVisIDByName.at(trajVisName),
+                                        trajVisName);
+  }
+
+  /**
+   * @brief Remove a trajectory visualization by object ID.
+   * @param trajVisObjID The object ID of the trajectory visualization to
+   * remove.
+   * @return whether successful or not.
+   */
+  bool removeTrajVisByID(int trajVisObjID) {
+    if (trajVisNameByID.count(trajVisObjID) == 0) {
+      LOG(INFO)
+          << "Simulator::removeTrajVisByName : No trajectory object with ID: "
+          << trajVisObjID << " exists.  Ignoring.";
+      return false;
+    }
+    return removeTrajVisObjectAndAssets(trajVisObjID,
+                                        trajVisNameByID.at(trajVisObjID));
+  }
+
+ protected:
+  /**
+   * @brief Internal use only. Remove a trajectory object, its mesh, and all
+   * references to it.
+   * @param trajVisObjID The object ID of the trajectory visualization to
+   * remove.
+   * @param trajVisName The name of the trajectory visualization to remove.
+   * @return whether successful or not.
+   */
+  bool removeTrajVisObjectAndAssets(int trajVisObjID,
+                                    const std::string& trajVisName) {
+    removeObject(trajVisObjID);
+    // TODO : support removing asset by removing from resourceDict_ properly
+    // using trajVisName
+    trajVisIDByName.erase(trajVisName);
+    trajVisNameByID.erase(trajVisObjID);
+    return true;
+  }
+
+ public:
   agent::Agent::ptr getAgent(int agentId);
 
   agent::Agent::ptr addAgent(const agent::AgentConfiguration& agentConfig,
                              scene::SceneNode& agentParentNode);
   agent::Agent::ptr addAgent(const agent::AgentConfiguration& agentConfig);
+
+  /**
+   * @brief Initialize sensor and attach to sceneNode of a particular object
+   * @param objectId    Id of the object to which a sensor will be initialized
+   * at its node
+   * @param sensorSpec  SensorSpec of sensor to be initialized
+   * @return            handle to sensor initialized
+   *
+   */
+  esp::sensor::Sensor::ptr addSensorToObject(
+      const int objectId,
+      const esp::sensor::SensorSpec::ptr& sensorSpec);
 
   /**
    * @brief Displays observations on default frame buffer for a
@@ -621,8 +757,8 @@ class Simulator {
 
   /**
    * @brief draw observations to the frame buffer stored in that
-   * particular sensor of an agent. Unlike the @displayObservation, it will not
-   * display the observation on the default frame buffer
+   * particular sensor of an agent. Unlike the @displayObservation, it will
+   * not display the observation on the default frame buffer
    * @param agentId    Id of the agent for which the observation is to
    *                   be returned
    * @param sensorId   Id of the sensor for which the observation is to
@@ -664,8 +800,7 @@ class Simulator {
    *
    * @param key The string key of the @ref gfx::LightSetup.
    */
-  gfx::LightSetup getLightSetup(
-      const std::string& key = assets::ResourceManager::DEFAULT_LIGHTING_KEY);
+  gfx::LightSetup getLightSetup(const std::string& key = DEFAULT_LIGHTING_KEY);
 
   /**
    * @brief Register a @ref gfx::LightSetup with a key name.
@@ -676,9 +811,8 @@ class Simulator {
    * @param lightSetup The @ref gfx::LightSetup this key will now reference.
    * @param key Key to identify this @ref gfx::LightSetup.
    */
-  void setLightSetup(
-      gfx::LightSetup lightSetup,
-      const std::string& key = assets::ResourceManager::DEFAULT_LIGHTING_KEY);
+  void setLightSetup(gfx::LightSetup lightSetup,
+                     const std::string& key = DEFAULT_LIGHTING_KEY);
 
   /**
    * @brief Set the light setup of an object
@@ -706,16 +840,90 @@ class Simulator {
   }
 
   /**
+   * @brief Get this simulator's MetadataMediator
+   */
+  const metadata::MetadataMediator::ptr getMetadataMediator() const {
+    return metadataMediator_;
+  }
+
+  /**
    * @brief Set this simulator's MetadataMediator
    */
   void setMetadataMediator(metadata::MetadataMediator::ptr _metadataMediator) {
-    metadataMediator_ = _metadataMediator;
+    metadataMediator_ = std::move(_metadataMediator);
+    // set newly added MM to have current Simulator Config
+    metadataMediator_->setSimulatorConfiguration(this->config_);
   }
 
- protected:
-  Simulator(){};
+  /**
+   * @brief Load and add a render asset instance to the current scene graph(s).
+   * @param assetInfo the asset to load
+   * @param creation how to create the instance
+   */
+  scene::SceneNode* loadAndCreateRenderAssetInstance(
+      const assets::AssetInfo& assetInfo,
+      const assets::RenderAssetInstanceCreationInfo& creation);
 
-  //! sample a random valid AgentState in passed agentState
+#ifdef ESP_BUILD_WITH_VHACD
+  /**
+   * @brief Runs convex hull decomposition on a specified file. Creates an
+   * object attributes referencing a newly created convex hull asset, and
+   * returns the attribute's handle.
+   *
+   * @param filename The MeshMetaData filename to be converted.
+   * @param params VHACD params that specify resolution, vertices per convex
+   * hull, etc.
+   * @param renderChd Specifies whether or not to render the coinvex hull asset,
+   * or to render the original render asset.
+   * @param saveChdToObj Specifies whether or not to save the newly created
+   * convex hull asset to an obj file.
+   * @return The handle of the newly created object attributes.
+   */
+  std::string convexHullDecomposition(
+      const std::string& filename,
+      const assets::ResourceManager::VHACDParameters& params =
+          assets::ResourceManager::VHACDParameters(),
+      bool renderChd = false,
+      bool saveChdToObj = false);
+#endif
+
+ protected:
+  Simulator() = default;
+  /**
+   * @brief Builds a scene instance and populates it with initial object layout,
+   * if appropriate, based on @ref esp::metadata::attributes::SceneAttributes
+   * referenced by @p activeSceneName .
+   * @param activeSceneName The name of the desired SceneAttributes to use to
+   * instantiate a scene.
+   * @return Whether successful or not.
+   */
+  bool createSceneInstance(const std::string& activeSceneName);
+
+  /**
+   * @brief Builds a scene instance based on @ref
+   * esp::metadata::attributes::SceneAttributes referenced by @p activeSceneName
+   * . This function is specifically for cases where no renderer is desired.
+   * @param activeSceneName The name of the desired SceneAttributes to use to
+   * instantiate a scene.
+   * @return Whether successful or not.
+   */
+  bool createSceneInstanceNoRenderer(const std::string& activeSceneName);
+
+  /**
+   * @brief Shared initial functionality for creating/setting the current scene
+   * instance attributes corresponding to activeSceneName, regardless of desired
+   * renderer state.
+   * @param activeSceneName The name of the desired active scene instance, as
+   * specified in Simulator Configuration.
+   * @return a constant pointer to the current scene instance attributes.
+   */
+  metadata::attributes::SceneAttributes::cptr setSceneInstanceAttributes(
+      const std::string& activeSceneName);
+
+  /**
+   * @brief sample a random valid AgentState in passed agentState
+   * @param agentState [out] The placeholder for the sampled agent state.
+   */
   void sampleRandomAgentState(agent::AgentState& agentState);
 
   bool isValidScene(int sceneID) const {
@@ -725,6 +933,8 @@ class Simulator {
   bool sceneHasPhysics(int sceneID) const {
     return isValidScene(sceneID) && physicsManager_ != nullptr;
   }
+
+  void reconfigureReplayManager(bool enableGfxReplaySave);
 
   gfx::WindowlessContext::uptr context_ = nullptr;
   std::shared_ptr<gfx::Renderer> renderer_ = nullptr;
@@ -736,9 +946,12 @@ class Simulator {
   // during the deconstruction
   std::unique_ptr<assets::ResourceManager> resourceManager_ = nullptr;
 
-  // Owns and manages the metadata/attributes managers
+  /**
+   * @brief Owns and manages the metadata/attributes managers
+   */
   metadata::MetadataMediator::ptr metadataMediator_ = nullptr;
   scene::SceneManager::uptr sceneManager_ = nullptr;
+
   int activeSceneID_ = ID_UNDEFINED;
   int activeSemanticSceneID_ = ID_UNDEFINED;
   std::vector<int> sceneID_;
@@ -747,10 +960,13 @@ class Simulator {
 
   std::shared_ptr<physics::PhysicsManager> physicsManager_ = nullptr;
 
+  std::shared_ptr<esp::gfx::replay::ReplayManager> gfxReplayMgr_;
+
   core::Random::ptr random_;
   SimulatorConfiguration config_;
 
   std::vector<agent::Agent::ptr> agents_;
+
   nav::PathFinder::ptr pathfinder_;
   // state indicating frustum culling is enabled or not
   //
@@ -766,6 +982,10 @@ class Simulator {
   //! NavMesh visualization variables
   int navMeshVisPrimID_ = esp::ID_UNDEFINED;
   esp::scene::SceneNode* navMeshVisNode_ = nullptr;
+
+  //! Maps holding IDs and Names of trajectory visualizations
+  std::map<std::string, int> trajVisIDByName;
+  std::map<int, std::string> trajVisNameByID;
 
   /**
    * @brief Tracks whether or not the simulator was initialized

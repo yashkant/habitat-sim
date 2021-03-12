@@ -16,6 +16,12 @@ namespace gfx {
 class Renderer {
  public:
   enum class Flag {
+    /**
+     * No textures for the meshes.
+     * Textures take a lot of GPU memory but they are not needed unless we are
+     * doing RGB rendering.
+     * Note: Cannot set this flag when doing RGB rendering
+     */
     NoTextures = 1 << 0,
   };
 
@@ -41,12 +47,6 @@ class Renderer {
    * @brief Binds a @ref RenderTarget to the sensor
    */
   void bindRenderTarget(sensor::VisualSensor& sensor);
-
-  // draw the scene graph with the default camera in scene graph
-  // user needs to set the default camera so that it has correct
-  // modelview matrix, projection matrix to render the scene
-  // See setDefaultRenderCamera(...) in SceneGraph for more details
-  // void draw(scene::SceneGraph& sceneGraph);
 
   ESP_SMART_POINTERS_WITH_UNIQUE_PIMPL(Renderer)
 };

@@ -54,7 +54,7 @@ class Drawable : public Magnum::SceneGraph::Drawable3D {
   Drawable(scene::SceneNode& node,
            Magnum::GL::Mesh& mesh,
            DrawableGroup* group = nullptr);
-  virtual ~Drawable();
+  ~Drawable() override;
 
   virtual scene::SceneNode& getSceneNode() { return node_; }
 
@@ -71,7 +71,8 @@ class Drawable : public Magnum::SceneGraph::Drawable3D {
    */
   uint64_t getDrawableId() { return drawableId_; }
 
-  virtual void setLightSetup(const Magnum::ResourceKey& lightSetup){};
+  virtual void setLightSetup(
+      CORRADE_UNUSED const Magnum::ResourceKey& lightSetup){};
 
   Magnum::GL::Mesh& getMesh() { return mesh_; }
 
@@ -96,8 +97,8 @@ class Drawable : public Magnum::SceneGraph::Drawable3D {
    * Each derived drawable class needs to implement this draw() function.
    * It's nothing more than drawing itself with its group's shader.
    */
-  virtual void draw(const Magnum::Matrix4& transformationMatrix,
-                    Magnum::SceneGraph::Camera3D& camera) = 0;
+  void draw(const Magnum::Matrix4& transformationMatrix,
+            Magnum::SceneGraph::Camera3D& camera) override = 0;
 
   static uint64_t drawableIdCounter;
   uint64_t drawableId_;

@@ -107,19 +107,19 @@ inline std::ostream& operator<<(std::ostream& os, const box3f& bbox) {
 }
 
 // smart pointers macro
-#define ESP_SMART_POINTERS(T)                                 \
- public:                                                      \
-  typedef std::shared_ptr<T> ptr;                             \
-  typedef std::unique_ptr<T> uptr;                            \
-  typedef std::shared_ptr<const T> cptr;                      \
-  typedef std::unique_ptr<const T> ucptr;                     \
-  template <typename... Targs>                                \
-  static inline ptr create(Targs&&... args) {                 \
-    return std::make_shared<T>(std::forward<Targs>(args)...); \
-  }                                                           \
-  template <typename... Targs>                                \
-  static inline uptr create_unique(Targs&&... args) {         \
-    return std::make_unique<T>(std::forward<Targs>(args)...); \
+#define ESP_SMART_POINTERS(...)                                         \
+ public:                                                                \
+  typedef std::shared_ptr<__VA_ARGS__> ptr;                             \
+  typedef std::unique_ptr<__VA_ARGS__> uptr;                            \
+  typedef std::shared_ptr<const __VA_ARGS__> cptr;                      \
+  typedef std::unique_ptr<const __VA_ARGS__> ucptr;                     \
+  template <typename... Targs>                                          \
+  static inline ptr create(Targs&&... args) {                           \
+    return std::make_shared<__VA_ARGS__>(std::forward<Targs>(args)...); \
+  }                                                                     \
+  template <typename... Targs>                                          \
+  static inline uptr create_unique(Targs&&... args) {                   \
+    return std::make_unique<__VA_ARGS__>(std::forward<Targs>(args)...); \
   }
 
 // pimpl macro backed by unique_ptr pointer
@@ -149,6 +149,36 @@ constexpr int ID_UNDEFINED = -1;
 constexpr double PHYSICS_ATTR_UNDEFINED = -1.0;
 
 static const double NO_TIME = 0.0;
+
+/**
+ * @brief The @ref esp::gfx::ShaderManager key for @ref esp::gfx::LightInfo
+ * which has no lights
+ */
+constexpr char NO_LIGHT_KEY[] = "no_lights";
+
+/**
+ *@brief The @ref esp::gfx::ShaderManager key for the default @ref
+ *esp::gfx::LightInfo
+ */
+constexpr char DEFAULT_LIGHTING_KEY[] = "";
+
+/**
+ *@brief The @ref esp::gfx::ShaderManager key for the default @ref
+ *esp::gfx::MaterialInfo
+ */
+constexpr char DEFAULT_MATERIAL_KEY[] = "";
+
+/**
+ *@brief The @ref esp::gfx::ShaderManager key for full ambient white @ref
+ *esp::gfx::MaterialInfo used for primitive wire-meshes
+ */
+constexpr char WHITE_MATERIAL_KEY[] = "ambient_white";
+
+/**
+ *@brief The @ref ShaderManager key for @ref MaterialInfo with per-vertex
+ * object ID
+ */
+constexpr char PER_VERTEX_OBJECT_ID_MATERIAL_KEY[] = "per_vertex_object_id";
 
 template <typename T>
 inline bool equal(const std::vector<std::shared_ptr<T>>& a,

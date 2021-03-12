@@ -6,6 +6,7 @@
 #define ESP_METADATA_ATTRIBUTES_LIGHTLAYOUTATTRIBUTES_H_
 
 #include "AttributesBase.h"
+#include "esp/gfx/LightSetup.h"
 
 namespace esp {
 namespace metadata {
@@ -18,7 +19,13 @@ namespace attributes {
  */
 class LightInstanceAttributes : public AbstractAttributes {
  public:
-  LightInstanceAttributes(const std::string& handle = "");
+  /**
+   * @brief Constant static map to provide mappings from string tags to @ref
+   * esp::gfx::LightType values.  This will be used to map values set in json
+   * for light type to @ref esp::gfx::LightType.  Keys must be lowercase.
+   */
+  static const std::map<std::string, esp::gfx::LightType> LightTypeNamesMap;
+  explicit LightInstanceAttributes(const std::string& handle = "");
 
   /**
    * @brief Get/Set the position of the light.
@@ -51,8 +58,8 @@ class LightInstanceAttributes : public AbstractAttributes {
   /**
    * @brief Get/Set the type of the light
    */
-  void setType(const std::string& type) { setString("type", type); }
-  std::string getType() const { return getString("type"); }
+  void setType(int type) { setInt("type", type); }
+  int getType() const { return getInt("type"); }
 
   /**
    * @brief Get/Set inner cone angle for spotlights.  Should be ignored for
@@ -83,12 +90,12 @@ class LightInstanceAttributes : public AbstractAttributes {
  */
 class LightLayoutAttributes : public AbstractAttributes {
  public:
-  LightLayoutAttributes(const std::string& handle = "");
+  explicit LightLayoutAttributes(const std::string& handle = "");
 
   /**
    * @brief Add a light instance to this lighting layout
    */
-  void addLightInstance(LightInstanceAttributes::ptr _lightInstance) {
+  void addLightInstance(const LightInstanceAttributes::ptr& _lightInstance) {
     lightInstances_.emplace(_lightInstance->getHandle(), _lightInstance);
   }
 
@@ -114,7 +121,7 @@ class LightLayoutAttributes : public AbstractAttributes {
   /**
    * @brief Get the lighting instances for this layout
    */
-  const std::map<std::string, LightInstanceAttributes::ptr> getLightInstances()
+  const std::map<std::string, LightInstanceAttributes::ptr>& getLightInstances()
       const {
     return lightInstances_;
   }

@@ -13,6 +13,8 @@ set(
   MeshMetaData.h
   Mp3dInstanceMeshData.cpp
   Mp3dInstanceMeshData.h
+  RenderAssetInstanceCreationInfo.cpp
+  RenderAssetInstanceCreationInfo.h
   ResourceManager.cpp
   ResourceManager.h
 )
@@ -78,6 +80,10 @@ target_link_libraries(
          MagnumPlugins::TinyGltfImporter
   PRIVATE geo io
 )
+
+if(BUILD_WITH_VHACD)
+  target_link_libraries(assets PUBLIC vhacd)
+endif()
 
 if(BUILD_ASSIMP_SUPPORT)
   target_link_libraries(

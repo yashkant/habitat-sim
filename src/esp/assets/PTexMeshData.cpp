@@ -345,11 +345,11 @@ std::vector<PTexMeshData::MeshData> loadSubMeshes(
       uint32_t f = originalFaces[jFace];
       for (size_t v = 0; v < 4; ++v) {
         uint32_t global = mesh.ibo[f * 4 + v];
-        uint32_t local = globalToLocal[global];
-        CORRADE_ASSERT(local >= 0,
+        CORRADE_ASSERT(globalToLocal.find(global) != globalToLocal.end(),
                        "PTexMeshData::loadSubMeshes: vertex "
                            << global << " is not in the sub-mesh " << iMesh,
                        {});
+        uint32_t local = globalToLocal[global];
         ibo[idx++] = local;
       }
     }  // for jFace
@@ -554,7 +554,7 @@ void PTexMeshData::parsePLY(const std::string& filename,
                        "in little endian byte order", );
       } else if (token == "element") {
         std::string name;
-        size_t size;
+        size_t size = 0;
         ls >> name >> size;
 
         if (name == "vertex") {

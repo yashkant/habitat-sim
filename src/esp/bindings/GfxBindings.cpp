@@ -57,10 +57,16 @@ void initGfxBindings(py::module& m) {
   render_camera
       .def(py::init_alias<std::reference_wrapper<scene::SceneNode>,
                           const vec3f&, const vec3f&, const vec3f&>())
-      .def("set_projection_matrix", &RenderCamera::setProjectionMatrix, R"(
-        Set this `Camera`'s projection matrix.
-      )",
-           "width"_a, "height"_a, "znear"_a, "zfar"_a, "hfov"_a)
+      .def("set_projection_matrix",
+           static_cast<RenderCamera& (RenderCamera::*)(int, int, float, float,
+                                                       Mn::Deg)>(
+               &RenderCamera::setProjectionMatrix),
+           R"(Set this `Camera`'s projection matrix.)", "width"_a, "height"_a,
+           "znear"_a, "zfar"_a, "hfov"_a)
+      .def("set_orthographic_projection_matrix",
+           &RenderCamera::setOrthoProjectionMatrix,
+           R"(Set this `Orthographic Camera`'s projection matrix.)", "width"_a,
+           "height"_a, "znear"_a, "zfar"_a, "scale"_a)
       .def(
           "unproject", &RenderCamera::unproject,
           R"(Unproject a 2D viewport point to a 3D ray with its origin at the camera position.)",
@@ -145,6 +151,11 @@ void initGfxBindings(py::module& m) {
       .value("GLOBAL", LightPositionModel::GLOBAL)
       .value("OBJECT", LightPositionModel::OBJECT);
 
+  py::enum_<LightType>(
+      m, "LightType", R"(Defines the type of light described by the LightInfo)")
+      .value("Point", LightType::Point)
+      .value("Directional", LightType::Directional);
+
   py::class_<LightInfo>(
       m, "LightInfo",
       R"(Defines the vector, color and LightPositionModel of a single light source.
@@ -160,9 +171,8 @@ void initGfxBindings(py::module& m) {
       .def(py::self == py::self)
       .def(py::self != py::self);
 
-  m.attr("DEFAULT_LIGHTING_KEY") =
-      assets::ResourceManager::DEFAULT_LIGHTING_KEY;
-  m.attr("NO_LIGHT_KEY") = assets::ResourceManager::NO_LIGHT_KEY;
+  m.attr("DEFAULT_LIGHTING_KEY") = DEFAULT_LIGHTING_KEY;
+  m.attr("NO_LIGHT_KEY") = NO_LIGHT_KEY;
 }
 
 }  // namespace gfx
