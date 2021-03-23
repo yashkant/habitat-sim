@@ -29,12 +29,10 @@ ln -s "/usr/local/lib/python${PYTHON_VERSION}/dist-packages" "/usr/local/lib/pyt
 conda config --set pip_interop_enabled True
 NIGHTLY="${NIGHTLY:-false}" #setting the ENV $NIGHTLY to true will install the nightly version from conda
 CHANNEL="${CHANNEL:-aihabitat}"
-#PACKAGE="${PACKAGE:-habitat-sim}"
 if ${NIGHTLY}; then
   CHANNEL="${CHANNEL}-nightly"
 fi
-echo "${PACKAGE}"
-conda install -S -y --prefix /usr/local -c "${CHANNEL}" -c conda-forge habitat-sim-ao headless withbullet "python=${PYTHON_VERSION}" "numpy==${NUMPY_VERSION}" "pillow==${PIL_VERSION}" "cffi==${CFFI_VERSION}"
+conda install -S -y --prefix /usr/local -c "${CHANNEL}" -c conda-forge habitat-sim headless withbullet "python=${PYTHON_VERSION}" "numpy==${NUMPY_VERSION}" "pillow==${PIL_VERSION}" "cffi==${CFFI_VERSION}"
 
 #Shallow GIT clone for speed
 git clone https://github.com/facebookresearch/habitat-lab --depth 1
