@@ -33,6 +33,7 @@ PACKAGE="${PACKAGE:-habitat-sim}"
 if ${NIGHTLY}; then
   CHANNEL="${CHANNEL}-nightly"
 fi
+echo "${PACKAGE}"
 conda install -S -y --prefix /usr/local -c "${CHANNEL}" -c conda-forge "${PACKAGE}" headless withbullet "python=${PYTHON_VERSION}" "numpy==${NUMPY_VERSION}" "pillow==${PIL_VERSION}" "cffi==${CFFI_VERSION}"
 
 #Shallow GIT clone for speed
