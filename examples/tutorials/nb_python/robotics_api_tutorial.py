@@ -76,9 +76,7 @@ repo = git.Repo(".", search_parent_directories=True)
 dir_path = repo.working_tree_dir
 # %cd $dir_path
 data_path = os.path.join(dir_path, "data")
-output_directory = (
-    "examples/tutorials/robotics_api_tutorial_output/"  # @param {type:"string"}
-)
+output_directory = "examples/tutorials/robotics_api_output/"  # @param {type:"string"}
 output_path = os.path.join(dir_path, output_directory)
 if not os.path.exists(output_path):
     os.mkdir(output_path)
