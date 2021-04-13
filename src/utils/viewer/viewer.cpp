@@ -57,6 +57,7 @@
 #endif
 
 #include "esp/sensor/CameraSensor.h"
+#include "esp/sensor/EquirectangularSensor.h"
 #include "esp/sim/Simulator.h"
 
 #include "ObjectPickingHelper.h"
@@ -386,6 +387,7 @@ Key Commands:
   Mn::DebugTools::GLFrameProfiler profiler_{};
 
   bool fisheyeMode_ = false;
+  int equirectangularMode_ = 0;
 
   void bindRenderTarget();
 };
@@ -458,6 +460,18 @@ void addSensors(esp::agent::AgentConfiguration& agentConfig,
     spec->focalLength = Mn::Vector2(size * 0.5, size * 0.5);
     spec->principalPointOffset =
         Mn::Vector2(viewportSize[0] / 2, viewportSize[1] / 2);
+  }
+
+  // add the equirectangular sensor
+  agentConfig.sensorSpecifications.emplace_back(
+      esp::sensor::EquirectangularSensorSpec::create());
+  {
+    auto equirectangularSensorSpec =
+        static_cast<esp::sensor::EquirectangularSensorSpec*>(
+            agentConfig.sensorSpecifications.back().get());
+    equirectangularSensorSpec->uuid = "equirectangular";
+    equirectangularSensorSpec->resolution =
+        esp::vec2i(viewportSize[1], viewportSize[0]);
   }
 }
 
@@ -625,10 +639,24 @@ Viewer::Viewer(const Arguments& arguments)
        esp::agent::ActionSpec::create(
            "lookDown", esp::agent::ActuationMap{{"amount", lookSensitivity}})},
   };
+  auto cameraSensorSpec = esp::sensor::CameraSensorSpec::create();
+  cameraSensorSpec->uuid = "rgba_camera";
+  cameraSensorSpec->sensorSubType =
+      args.isSet("orthographic") ? esp::sensor::SensorSubType::Orthographic
+                                 : esp::sensor::SensorSubType::Pinhole;
+  cameraSensorSpec->sensorType = esp::sensor::SensorType::Color;
+  cameraSensorSpec->position = {0.0f, 1.5f, 0.0f};
+  cameraSensorSpec->orientation = {0, 0, 0};
+  cameraSensorSpec->resolution = esp::vec2i(viewportSize[1], viewportSize[0]);
 
-  addSensors(agentConfig, args);
-  // add selects a random initial state and sets up the default controls and
-  // step filter
+  auto equirectangularSensorSpec =
+      esp::sensor::EquirectangularSensorSpec::create();
+  equirectangularSensorSpec->uuid = "equirectangular";
+  equirectangularSensorSpec->resolution =
+      esp::vec2i(viewportSize[1], viewportSize[0]);
+
+  agentConfig.sensorSpecifications = {cameraSensorSpec,
+                                      equirectangularSensorSpec};
   simulator_->addAgent(agentConfig);
 
   // Set up camera
@@ -695,6 +723,12 @@ void Viewer::switchCameraType() {
     }
     case esp::sensor::SensorSubType::Orthographic: {
       cam.setCameraType(esp::sensor::SensorSubType::Pinhole);
+      return;
+    }
+    case esp::sensor::SensorSubType::Fisheye: {
+      return;
+    }
+    case esp::sensor::SensorSubType::Equirectangular: {
       return;
     }
     case esp::sensor::SensorSubType::None: {
@@ -1518,6 +1552,10 @@ void Viewer::keyPressEvent(KeyEvent& event) {
             simulator_->getPathFinder()->getRandomNavigablePoint();
         agentBodyNode_->setTranslation(Mn::Vector3(position));
       }
+      break;
+    case KeyEvent::Key::Zero:
+      equirectangularMode_ = (equirectangularMode_ + 1) % 2;
+      LOG(INFO) << "Equirectangular mode is " << equirectangularMode_;
       break;
     case KeyEvent::Key::LeftBracket:
       saveCameraTransformToFile();

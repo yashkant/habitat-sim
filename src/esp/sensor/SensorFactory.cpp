@@ -6,6 +6,7 @@
 
 #include "esp/scene/SceneNode.h"
 #include "esp/sensor/CameraSensor.h"
+#include "esp/sensor/EquirectangularSensor.h"
 #include "esp/sensor/FisheyeSensor.h"
 #include "esp/sensor/Sensor.h"
 
@@ -26,11 +27,10 @@ SensorFactory::createSensors(scene::SceneNode& node,
                  spec->sensorSubType == SensorSubType::Pinhole) {
         sensorNode.addFeature<sensor::CameraSensor>(
             std::dynamic_pointer_cast<sensor::CameraSensorSpec>(spec));
+      } else if (spec->sensorSubType == SensorSubType::Equirectangular) {
+        sensorNode.addFeature<sensor::EquirectangularSensor>(
+            std::dynamic_pointer_cast<EquirectangularSensorSpec>(spec));
       }
-      // TODO: Implement fisheye sensor, Equirectangular sensor, Panorama sensor
-      // else if(spec->sensorSubType == SensorSubType::Fisheye) {
-      //   sensorSuite.add(sensor::FisheyeSensor::create(sensorNode, spec));
-      //
     }
     // TODO: Implement NonVisualSensorSpecs
     // else if (!spec->isVisualSensorSpec()) {}

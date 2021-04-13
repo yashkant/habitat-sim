@@ -24,6 +24,8 @@ set(
   CubeMapCamera.h
   CubeMap.cpp
   CubeMap.h
+  EquirectangularShader.cpp
+  EquirectangularShader.h
   Renderer.cpp
   Renderer.h
   replay/Keyframe.h

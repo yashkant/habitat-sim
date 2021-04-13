@@ -43,6 +43,7 @@ enum class SensorSubType : int32_t {
   Pinhole,
   Orthographic,
   Fisheye,
+  Equirectangular,
   SensorSubTypeCount,  // add new type above this term!!
 };
 

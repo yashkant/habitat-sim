@@ -162,6 +162,14 @@ class CubeMap {
                            RenderCamera::Flag::ClearColor |
                            RenderCamera::Flag::ClearDepth});
 
+  /**
+   * @brief Return framebuffer
+   */
+  Corrade::Containers::StaticArray<6, Magnum::GL::Framebuffer>&
+  getFrameBuffer() {
+    return frameBuffer_;
+  }
+
  private:
   Flags flags_;
   int imageSize_ = 0;
