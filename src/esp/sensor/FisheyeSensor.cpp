@@ -49,7 +49,7 @@ void specSanityCheck(FisheyeSensorSpec* spec) {
   auto actualSpec = dynamic_cast<T*>(spec);
   ESP_CHECK(actualSpec,
             "FisheyeSensor::FisheyeSensor(): the spec cannot be converted "
-            "to any known fiesheye sensor spec.");
+            "to any known fisheye sensor spec.");
   actualSpec->sanityCheck();
 }
 
@@ -66,11 +66,11 @@ int computeCubemapSize(const esp::vec2i& resolution,
 FisheyeSensor::FisheyeSensor(scene::SceneNode& cameraNode,
                              const FisheyeSensorSpec::ptr& spec)
     : VisualSensor(cameraNode, spec) {
-  switch (fisheyeSensorSpec_->fisheyeModelType) {
-    case FisheyeSensorModelType::DoubleSphere: {
-      specSanityCheck<FisheyeSensorDoubleSphereSpec>(fisheyeSensorSpec_.get());
-    } break;
-  };
+  // switch (fisheyeSensorSpec_->fisheyeModelType) {
+  //   case FisheyeSensorModelType::DoubleSphere: {
+  //     specSanityCheck<FisheyeSensorDoubleSphereSpec>(fisheyeSensorSpec_.get());
+  //   } break;
+  // };
 
   // initialize a cubemap
   int size = computeCubemapSize(fisheyeSensorSpec_->resolution,
